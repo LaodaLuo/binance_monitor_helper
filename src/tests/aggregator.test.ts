@@ -82,6 +82,7 @@ describe('OrderAggregator', () => {
 
     expect(notifications).toHaveLength(1);
     expect(notifications[0].scenario).toBe(Scenario.MARKET_SINGLE);
+    expect(notifications[0].side).toBe('BUY');
     expect(notifications[0].stateLabel).toBe('市价成交');
     expect(notifications[0].cumulativeQuantity).toBe('1');
   });

@@ -23,6 +23,10 @@ export interface CardPayload {
   card: Record<string, unknown>;
 }
 
+function resolveDirection(side: OrderNotificationInput['side']): string {
+  return side === 'SELL' ? '卖出' : '买入';
+}
+
 export function buildFeishuCard(input: OrderNotificationInput): CardPayload {
   const elements: Record<string, unknown>[] = [];
 
@@ -32,6 +36,26 @@ export function buildFeishuCard(input: OrderNotificationInput): CardPayload {
       tag: 'lark_md',
       content: `**状态:** ${input.stateLabel}`
     }
+  });
+
+  elements.push({
+    tag: 'div',
+    fields: [
+      {
+        is_short: true,
+        text: {
+          tag: 'lark_md',
+          content: `**交易对:**\n${input.symbol}`
+        }
+      },
+      {
+        is_short: true,
+        text: {
+          tag: 'lark_md',
+          content: `**方向:**\n${resolveDirection(input.side)}`
+        }
+      }
+    ]
   });
 
   const fields: Record<string, unknown>[] = [

@@ -21,9 +21,14 @@ describe('buildFeishuCard', () => {
     const card = payload.card as any;
     const header = card.header;
     expect(header.title.content).toBe('交易对 BTCUSDT');
-    const sizeField = card.elements[1].fields[0].text.content;
+    const pairField = card.elements[1].fields[0].text.content;
+    expect(pairField).toContain('交易对');
+    const directionField = card.elements[1].fields[1].text.content;
+    expect(directionField).toContain('方向');
+    expect(directionField).toContain('买入');
+    const sizeField = card.elements[2].fields[0].text.content;
     expect(sizeField).toContain('Size');
-    const priceText = card.elements[2].text.content;
+    const priceText = card.elements[3].text.content;
     expect(priceText).toContain('平均成交价格');
   });
 
@@ -41,7 +46,10 @@ describe('buildFeishuCard', () => {
     });
 
     const card = payload.card as any;
-    const priceText = card.elements[2].text.content;
+    const directionField = card.elements[1].fields[1].text.content;
+    expect(directionField).toContain('方向');
+    expect(directionField).toContain('买入');
+    const priceText = card.elements[3].text.content;
     expect(priceText).toContain('价格');
     expect(priceText).not.toContain('平均');
   });

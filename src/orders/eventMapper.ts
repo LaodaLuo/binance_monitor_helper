@@ -1,11 +1,5 @@
 import { z } from 'zod';
-import type {
-  OrderEvent,
-  OrderSide,
-  OrderStatus,
-  OrderType,
-  RawOrderTradeUpdate
-} from './types.js';
+import type { OrderEvent, OrderStatus, OrderType, RawOrderTradeUpdate } from './types.js';
 
 const rawOrderTradeUpdateSchema = z.object({
   e: z.literal('ORDER_TRADE_UPDATE'),
@@ -14,7 +8,7 @@ const rawOrderTradeUpdateSchema = z.object({
   o: z.object({
     s: z.string(),
     c: z.string(),
-    S: z.enum(['BUY', 'SELL']) as z.ZodType<OrderSide>,
+    S: z.enum(['BUY', 'SELL']),
     o: z.string(),
     x: z.string(),
     X: z.string(),
@@ -38,7 +32,7 @@ export function parseRawOrderTradeUpdate(data: unknown): RawOrderTradeUpdate | n
   if (!parsed.success) {
     return null;
   }
-  return parsed.data;
+  return parsed.data as RawOrderTradeUpdate;
 }
 
 export function toOrderEvent(raw: RawOrderTradeUpdate): OrderEvent {

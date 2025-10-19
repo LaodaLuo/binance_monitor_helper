@@ -76,6 +76,7 @@ export interface AggregationContext {
 export interface OrderNotificationInput {
   scenario: ScenarioKey;
   symbol: string;
+  side: OrderSide;
   stateLabel: string;
   size: string;
   cumulativeQuantity?: string;

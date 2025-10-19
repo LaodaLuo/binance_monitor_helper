@@ -208,6 +208,7 @@ export class OrderAggregator {
     const payload: OrderNotificationInput = {
       scenario,
       symbol: latestEvent.symbol,
+      side: latestEvent.side,
       stateLabel: options.stateLabel,
       size: latestEvent.originalQuantity,
       cumulativeQuantity: options.includeCumulative && cumulativeQty.gt(0)
