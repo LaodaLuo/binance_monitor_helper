@@ -6,8 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc --project tsconfig.json",
-    "start": "ts-node --esm src/app/service.ts",
-    "dev": "NODE_ENV=development ts-node --esm src/app/service.ts",
+    "start": "node --loader ts-node/esm src/app/service.ts",
+    "dev": "NODE_ENV=development node --loader ts-node/esm src/app/service.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
