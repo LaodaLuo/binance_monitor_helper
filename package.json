@@ -1,0 +1,33 @@
+{
+  "name": "binance-monitor-helper",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Binance futures order monitor with Feishu notifications",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "start": "ts-node --esm src/app/service.ts",
+    "dev": "NODE_ENV=development ts-node --esm src/app/service.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@binance/connector": "^3.6.1",
+    "axios": "^1.7.4",
+    "big.js": "^6.2.1",
+    "dayjs": "^1.11.18",
+    "p-retry": "^7.1.0",
+    "pino": "^10.1.0",
+    "ws": "^8.18.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/big.js": "^6.2.2",
+    "@types/node": "^22.5.0",
+    "@types/ws": "^8.18.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4",
+    "vite": "^6.0.0",
+    "vitest": "^3.2.4"
+  }
+}
