@@ -1,5 +1,10 @@
 import Big from 'big.js';
-import { aggregationKey, type AggregationContext, type OrderEvent } from './types.js';
+import {
+  aggregationKey,
+  type AggregationContext,
+  type OrderEvent,
+  type OrderSource
+} from './types.js';
 
 const ZERO = new Big(0);
 
@@ -15,7 +20,7 @@ function safeBig(value: string | undefined | null): Big {
 export class OrderStateTracker {
   private readonly store = new Map<string, AggregationContext>();
 
-  update(event: OrderEvent): AggregationContext {
+  update(event: OrderEvent, source: OrderSource): AggregationContext {
     const key = aggregationKey(event);
     const existing = this.store.get(key);
 
@@ -24,6 +29,8 @@ export class OrderStateTracker {
       orderId: event.orderId,
       clientOrderId: event.clientOrderId,
       orderType: event.orderType,
+      side: event.side,
+      source,
       originalQuantity: event.originalQuantity,
       cumulativeQuantity: '0',
       cumulativeQuote: '0',
@@ -45,6 +52,8 @@ export class OrderStateTracker {
     const next: AggregationContext = {
       ...baseContext,
       orderType: event.orderType,
+      side: event.side,
+      source,
       cumulativeQuantity: event.cumulativeQuantity,
       cumulativeQuote: cumulativeQuote.toString(),
       lastAveragePrice: event.averagePrice,
@@ -68,6 +77,11 @@ export class OrderStateTracker {
 
   get(event: OrderEvent): AggregationContext | undefined {
     return this.store.get(aggregationKey(event));
+  }
+
+  getByIds(symbol: string, orderId: number, clientOrderId: string): AggregationContext | undefined {
+    const key = `${symbol}:${orderId}:${clientOrderId}`;
+    return this.store.get(key);
   }
 
   delete(event: OrderEvent): void {

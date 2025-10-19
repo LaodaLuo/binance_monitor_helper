@@ -54,6 +54,13 @@ export function buildFeishuCard(input: OrderNotificationInput): CardPayload {
           tag: 'lark_md',
           content: `**方向:**\n${resolveDirection(input.side)}`
         }
+      },
+      {
+        is_short: true,
+        text: {
+          tag: 'lark_md',
+          content: `**来源:**\n${input.source}`
+        }
       }
     ]
   });
@@ -83,7 +90,7 @@ export function buildFeishuCard(input: OrderNotificationInput): CardPayload {
     fields
   });
 
-  const priceLabel = input.orderType === 'MARKET' ? '平均成交价格' : '价格';
+  const priceLabel = input.priceSource === 'average' ? '平均成交价格' : '价格';
 
   elements.push({
     tag: 'div',

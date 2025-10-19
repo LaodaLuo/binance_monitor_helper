@@ -76,40 +76,46 @@ describe('OrderAggregator', () => {
     });
   });
 
-  it('handles 市价单一次性全部成交', async () => {
-    const event = buildEvent({ o: 'MARKET', X: 'FILLED', q: '1', z: '1', l: '1', c: 'MKT-1' });
+  it('handles 普通订单一次性全部成交', async () => {
+    const event = buildEvent({ o: 'LIMIT', X: 'FILLED', q: '1', z: '1', l: '1', c: 'ORD-1' });
     await aggregator.handleEvent(event);
 
     expect(notifications).toHaveLength(1);
-    expect(notifications[0].scenario).toBe(Scenario.MARKET_SINGLE);
+    expect(notifications[0].scenario).toBe(Scenario.GENERAL_SINGLE);
     expect(notifications[0].side).toBe('BUY');
-    expect(notifications[0].stateLabel).toBe('市价成交');
+    expect(notifications[0].source).toBe('其他');
+    expect(notifications[0].stateLabel).toBe('成交');
     expect(notifications[0].cumulativeQuantity).toBe('1');
+    expect(notifications[0].priceSource).toBe('average');
   });
 
-  it('handles 市价单分批成交且 10 秒内全部完成', async () => {
-    const partial = buildEvent({ o: 'MARKET', X: 'PARTIALLY_FILLED', z: '0.5', l: '0.5', c: 'MKT-2' });
-    const filled = buildEvent({ o: 'MARKET', X: 'FILLED', z: '1', l: '0.5', c: 'MKT-2' });
+  it('handles 普通订单分批成交且 10 秒内全部完成', async () => {
+    const partial = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.5', l: '0.5', c: 'ORD-2' });
+    const filled = buildEvent({ o: 'LIMIT', X: 'FILLED', z: '1', l: '0.5', c: 'ORD-2' });
 
     await aggregator.handleEvent(partial);
     await aggregator.handleEvent(filled);
 
     expect(notifications).toHaveLength(1);
-    expect(notifications[0].scenario).toBe(Scenario.MARKET_AGGREGATED);
+    expect(notifications[0].scenario).toBe(Scenario.GENERAL_AGGREGATED);
+    expect(notifications[0].source).toBe('其他');
     expect(notifications[0].cumulativeQuantity).toBe('1');
+    expect(notifications[0].priceSource).toBe('average');
   });
 
-  it('handles 市价单分批成交但 10 秒内无新增成交', async () => {
-    const partial = buildEvent({ o: 'MARKET', X: 'PARTIALLY_FILLED', z: '0.3', l: '0.3', c: 'MKT-3' });
+  it('handles 普通订单分批成交但 10 秒内无新增成交', async () => {
+    const partial = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.3', l: '0.3', c: 'ORD-3' });
     await aggregator.handleEvent(partial);
 
     vi.advanceTimersByTime(1000);
     await vi.runAllTimersAsync();
 
     expect(notifications).toHaveLength(1);
-    expect(notifications[0].scenario).toBe(Scenario.MARKET_TIMEOUT);
-    expect(notifications[0].stateLabel).toBe('市价成交');
+    expect(notifications[0].scenario).toBe(Scenario.GENERAL_TIMEOUT);
+    expect(notifications[0].stateLabel).toBe('部分成交');
+    expect(notifications[0].source).toBe('其他');
     expect(notifications[0].cumulativeQuantity).toBe('0.3');
+    expect(notifications[0].priceSource).toBe('average');
   });
 
   it('handles SL/TP 创建', async () => {
@@ -118,8 +124,10 @@ describe('OrderAggregator', () => {
 
     expect(notifications).toHaveLength(1);
     expect(notifications[0].scenario).toBe(Scenario.SLTP_NEW);
+    expect(notifications[0].source).toBe('止损');
     expect(notifications[0].stateLabel).toBe('创建');
     expect(notifications[0].cumulativeQuantity).toBeUndefined();
+    expect(notifications[0].priceSource).toBe('order');
   });
 
   it('handles SL/TP 取消', async () => {
@@ -128,8 +136,10 @@ describe('OrderAggregator', () => {
 
     expect(notifications).toHaveLength(1);
     expect(notifications[0].scenario).toBe(Scenario.SLTP_CANCELED);
+    expect(notifications[0].source).toBe('止损');
     expect(notifications[0].stateLabel).toBe('取消');
     expect(notifications[0].cumulativeQuantity).toBeUndefined();
+    expect(notifications[0].priceSource).toBe('order');
   });
 
   it('handles SL/TP 完全成交', async () => {
@@ -138,8 +148,10 @@ describe('OrderAggregator', () => {
 
     expect(notifications).toHaveLength(1);
     expect(notifications[0].scenario).toBe(Scenario.SLTP_FILLED);
+    expect(notifications[0].source).toBe('止盈');
     expect(notifications[0].stateLabel).toBe('成交');
     expect(notifications[0].cumulativeQuantity).toBe('1');
+    expect(notifications[0].priceSource).toBe('average');
   });
 
   it('handles SL/TP 部分成交且 10 秒内完成', async () => {
@@ -151,8 +163,10 @@ describe('OrderAggregator', () => {
 
     expect(notifications).toHaveLength(1);
     expect(notifications[0].scenario).toBe(Scenario.SLTP_PARTIAL_COMPLETED);
+    expect(notifications[0].source).toBe('止盈');
     expect(notifications[0].stateLabel).toBe('成交');
     expect(notifications[0].cumulativeQuantity).toBe('1');
+    expect(notifications[0].priceSource).toBe('average');
   });
 
   it('handles SL/TP 部分成交但 10 秒内未补足', async () => {
@@ -164,8 +178,10 @@ describe('OrderAggregator', () => {
 
     expect(notifications).toHaveLength(1);
     expect(notifications[0].scenario).toBe(Scenario.SLTP_PARTIAL_TIMEOUT);
+    expect(notifications[0].source).toBe('止盈');
     expect(notifications[0].stateLabel).toBe('部分成交');
     expect(notifications[0].cumulativeQuantity).toBe('0.4');
+    expect(notifications[0].priceSource).toBe('average');
   });
 
   it('handles SL/TP 部分成交后取消', async () => {
@@ -177,8 +193,10 @@ describe('OrderAggregator', () => {
 
     expect(notifications).toHaveLength(1);
     expect(notifications[0].scenario).toBe(Scenario.SLTP_PARTIAL_CANCELED);
+    expect(notifications[0].source).toBe('止盈');
     expect(notifications[0].stateLabel).toBe('取消');
     expect(notifications[0].cumulativeQuantity).toBe('0.5');
+    expect(notifications[0].priceSource).toBe('average');
   });
 
   it('ignores 非 SL/TP 的非市价订单', async () => {
@@ -186,5 +204,20 @@ describe('OrderAggregator', () => {
     await aggregator.handleEvent(event);
 
     expect(notifications).toHaveLength(0);
+  });
+
+  it('handles 普通订单部分成交后取消', async () => {
+    const partial = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.2', l: '0.2', c: 'ORD-4' });
+    const cancel = buildEvent({ o: 'LIMIT', X: 'CANCELED', z: '0.2', l: '0', c: 'ORD-4' });
+
+    await aggregator.handleEvent(partial);
+    await aggregator.handleEvent(cancel);
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].scenario).toBe(Scenario.GENERAL_PARTIAL_CANCELED);
+    expect(notifications[0].source).toBe('其他');
+    expect(notifications[0].stateLabel).toBe('取消');
+    expect(notifications[0].cumulativeQuantity).toBe('0.2');
+    expect(notifications[0].priceSource).toBe('average');
   });
 });

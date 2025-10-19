@@ -12,6 +12,8 @@ export type OrderStatus =
 
 export type OrderType = 'MARKET' | 'LIMIT' | 'STOP' | 'STOP_MARKET' | 'TAKE_PROFIT' | 'TAKE_PROFIT_MARKET' | string;
 
+export type OrderSource = '止盈' | '止损' | '其他';
+
 export interface RawOrderTradeUpdate {
   e: 'ORDER_TRADE_UPDATE';
   E: number;
@@ -62,6 +64,8 @@ export interface AggregationContext {
   orderId: number;
   clientOrderId: string;
   orderType: OrderType;
+  side: OrderSide;
+  source: OrderSource;
   originalQuantity: string;
   cumulativeQuantity: string;
   cumulativeQuote: string;
@@ -73,14 +77,18 @@ export interface AggregationContext {
   scenarioHint?: ScenarioKey;
 }
 
+export type PriceSource = 'average' | 'order';
+
 export interface OrderNotificationInput {
   scenario: ScenarioKey;
   symbol: string;
   side: OrderSide;
+  source: OrderSource;
   stateLabel: string;
   size: string;
   cumulativeQuantity?: string;
   displayPrice: string;
+  priceSource: PriceSource;
   notifyTime: Date;
   orderType: OrderType;
   status: OrderStatus;
@@ -88,23 +96,23 @@ export interface OrderNotificationInput {
 }
 
 export const Scenario = {
-  MARKET_SINGLE: '市价单相关/一次性全部成交',
-  MARKET_AGGREGATED: '市价单相关/分批成交且 10 秒内全部完成',
-  MARKET_TIMEOUT: '市价单相关/分批成交但 10 秒内无新增成交',
-  SLTP_IGNORED: 'SL/TP 订单/客户端订单号不以 SL 或 TP 开头',
   SLTP_NEW: 'SL/TP 订单/创建 (NEW)',
   SLTP_CANCELED: 'SL/TP 订单/取消 (CANCELED)',
   SLTP_FILLED: 'SL/TP 订单/完全成交 (FILLED)',
   SLTP_PARTIAL_COMPLETED: 'SL/TP 订单/部分成交且 10 秒内完成',
   SLTP_PARTIAL_TIMEOUT: 'SL/TP 订单/部分成交但 10 秒内未补足',
-  SLTP_PARTIAL_CANCELED: 'SL/TP 订单/部分成交后取消'
+  SLTP_PARTIAL_CANCELED: 'SL/TP 订单/部分成交后取消',
+  GENERAL_SINGLE: '普通订单/一次性全部成交',
+  GENERAL_AGGREGATED: '普通订单/分批成交且 10 秒内全部完成',
+  GENERAL_TIMEOUT: '普通订单/分批成交但 10 秒内无新增成交',
+  GENERAL_PARTIAL_CANCELED: '普通订单/部分成交后取消'
 } as const;
 
 export type ScenarioKey = (typeof Scenario)[keyof typeof Scenario];
 
-export const MARKET_WINDOW_SCENARIOS: ScenarioKey[] = [
-  Scenario.MARKET_AGGREGATED,
-  Scenario.MARKET_TIMEOUT
+export const GENERAL_WINDOW_SCENARIOS: ScenarioKey[] = [
+  Scenario.GENERAL_AGGREGATED,
+  Scenario.GENERAL_TIMEOUT
 ];
 
 export const SLTP_WINDOW_SCENARIOS: ScenarioKey[] = [
@@ -115,6 +123,12 @@ export const SLTP_WINDOW_SCENARIOS: ScenarioKey[] = [
 
 export function isStopLossOrTakeProfit(clientOrderId: string): boolean {
   return clientOrderId.startsWith('SL') || clientOrderId.startsWith('TP');
+}
+
+export function resolveOrderSource(clientOrderId: string): OrderSource {
+  if (clientOrderId.startsWith('TP')) return '止盈';
+  if (clientOrderId.startsWith('SL')) return '止损';
+  return '其他';
 }
 
 export function aggregationKey(event: OrderEvent): string {

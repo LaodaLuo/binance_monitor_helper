@@ -5,14 +5,12 @@ import { OrderStateTracker } from './stateTracker.js';
 import {
   Scenario,
   aggregationKey,
-  isStopLossOrTakeProfit,
+  resolveOrderSource,
   type AggregationContext,
   type OrderEvent,
   type OrderNotificationInput,
   type ScenarioKey
 } from './types.js';
-
-const ZERO = new Big(0);
 
 export type NotificationHandler = (payload: OrderNotificationInput) => Promise<void> | void;
 
@@ -38,60 +36,27 @@ export class OrderAggregator {
       throw new Error('Notification handler not registered');
     }
 
-    const isMarketOrder = event.orderType === 'MARKET';
-    const isSlTpOrder = isStopLossOrTakeProfit(event.clientOrderId);
+    const source = resolveOrderSource(event.clientOrderId);
 
-    if (!isMarketOrder && !isSlTpOrder) {
-      logger.debug({ event }, 'Ignoring non-target order');
+    if (source === '其他' && event.status === 'NEW') {
+      logger.debug({ event }, 'Ignoring NEW status for general order');
       return;
     }
 
-    const context = this.tracker.update(event);
+    const context = this.tracker.update(event, source);
 
-    if (isMarketOrder) {
-      await this.handleMarketOrder(event, context);
+    if (source === '止盈' || source === '止损') {
+      await this.handleSlTpOrder(event, context);
       return;
     }
 
-    await this.handleSlTpOrder(event, context);
+    await this.handleGeneralOrder(event, context);
   }
 
-  private async handleMarketOrder(event: OrderEvent, context: AggregationContext): Promise<void> {
-    switch (event.status) {
-      case 'NEW':
-        // 市价单 NEW 不需要通知
-        return;
-      case 'PARTIALLY_FILLED':
-        this.ensureTimer(context, Scenario.MARKET_TIMEOUT);
-        return;
-      case 'FILLED': {
-        const prevEvents = context.events.slice(0, -1);
-        if (prevEvents.length === 0) {
-          await this.emitNotification(context, Scenario.MARKET_SINGLE, {
-            stateLabel: '市价成交',
-            includeCumulative: true
-          });
-          this.clearContext(event);
-          return;
-        }
-
-        const scenario = context.timer ? Scenario.MARKET_AGGREGATED : Scenario.MARKET_SINGLE;
-        if (context.timer) {
-          clearTimeout(context.timer);
-        }
-        await this.emitNotification(context, scenario, {
-          stateLabel: '市价成交',
-          includeCumulative: true
-        });
-        this.clearContext(event);
-        return;
-      }
-      default:
-        return;
-    }
-  }
-
-  private async handleSlTpOrder(event: OrderEvent, context: AggregationContext): Promise<void> {
+  private async handleSlTpOrder(
+    event: OrderEvent,
+    context: AggregationContext
+  ): Promise<void> {
     switch (event.status) {
       case 'NEW': {
         await this.emitNotification(context, Scenario.SLTP_NEW, {
@@ -110,13 +75,17 @@ export class OrderAggregator {
         await this.emitNotification(context, scenario, {
           stateLabel: '取消',
           includeCumulative: hadPartialFill,
-          priceSource: 'order'
+          priceSource: hadPartialFill ? 'average' : 'order'
         });
         this.clearContext(event);
         return;
       }
       case 'PARTIALLY_FILLED': {
-        this.ensureTimer(context, Scenario.SLTP_PARTIAL_TIMEOUT);
+        this.ensureTimer(context, Scenario.SLTP_PARTIAL_TIMEOUT, {
+          stateLabel: '部分成交',
+          includeCumulative: true,
+          priceSource: 'average'
+        });
         return;
       }
       case 'FILLED': {
@@ -138,24 +107,75 @@ export class OrderAggregator {
     }
   }
 
-  private ensureTimer(context: AggregationContext, defaultScenario: ScenarioKey): void {
+  private async handleGeneralOrder(
+    event: OrderEvent,
+    context: AggregationContext
+  ): Promise<void> {
+    switch (event.status) {
+      case 'PARTIALLY_FILLED': {
+        this.ensureTimer(context, Scenario.GENERAL_TIMEOUT, {
+          stateLabel: '部分成交',
+          includeCumulative: true,
+          priceSource: 'average'
+        });
+        return;
+      }
+      case 'FILLED': {
+        const hadPartial = context.events.some((evt) => evt.status === 'PARTIALLY_FILLED');
+        if (context.timer) {
+          clearTimeout(context.timer);
+        }
+        const scenario = hadPartial ? Scenario.GENERAL_AGGREGATED : Scenario.GENERAL_SINGLE;
+        await this.emitNotification(context, scenario, {
+          stateLabel: '成交',
+          includeCumulative: true,
+          priceSource: 'average'
+        });
+        this.clearContext(event);
+        return;
+      }
+      case 'CANCELED': {
+        const hadPartial = context.events.some((evt) => evt.status === 'PARTIALLY_FILLED');
+        if (!hadPartial) {
+          this.clearContext(event);
+          return;
+        }
+        if (context.timer) {
+          clearTimeout(context.timer);
+        }
+        await this.emitNotification(context, Scenario.GENERAL_PARTIAL_CANCELED, {
+          stateLabel: '取消',
+          includeCumulative: true,
+          priceSource: 'average'
+        });
+        this.clearContext(event);
+        return;
+      }
+      default:
+        // NEW 及其他状态忽略
+        return;
+    }
+  }
+
+  private ensureTimer(
+    context: AggregationContext,
+    scenario: ScenarioKey,
+    options: EmitOptions
+  ): void {
     if (context.timer) {
-      // 更新计时触发点
       clearTimeout(context.timer);
     }
 
     const key = `${context.symbol}:${context.orderId}:${context.clientOrderId}`;
     const timer = setTimeout(async () => {
       try {
-        const scenario = this.resolveTimeoutScenario(context, defaultScenario);
-        await this.emitNotification(context, scenario, {
-          stateLabel: scenario.includes('市价单') ? '市价成交' : '部分成交',
-          includeCumulative: true,
-          priceSource: scenario.includes('市价单') ? 'average' : 'average'
-        });
-        this.tracker.delete({
-          ...context.events[context.events.length - 1]
-        });
+        const latest = this.tracker.getByIds(context.symbol, context.orderId, context.clientOrderId);
+        if (!latest) {
+          return;
+        }
+        await this.emitNotification(latest, scenario, options);
+        const lastEvent = latest.events[latest.events.length - 1];
+        this.clearContext(lastEvent);
       } catch (error) {
         logger.error({ error, context }, 'Failed to emit notification on timeout');
       }
@@ -164,29 +184,16 @@ export class OrderAggregator {
     this.tracker.setContext({
       ...context,
       timer,
-      scenarioHint: defaultScenario
+      scenarioHint: scenario
     });
 
     logger.debug({ key }, 'Aggregation timer started');
   }
 
-  private resolveTimeoutScenario(context: AggregationContext, fallback: ScenarioKey): ScenarioKey {
-    if (context.orderType === 'MARKET') {
-      return Scenario.MARKET_TIMEOUT;
-    }
-    return context.events.some((evt) => evt.status === 'PARTIALLY_FILLED')
-      ? Scenario.SLTP_PARTIAL_TIMEOUT
-      : fallback;
-  }
-
   private async emitNotification(
     context: AggregationContext,
     scenario: ScenarioKey,
-    options: {
-      stateLabel: string;
-      includeCumulative: boolean;
-      priceSource?: 'average' | 'order';
-    }
+    options: EmitOptions
   ): Promise<void> {
     if (!this.notificationHandler) return;
 
@@ -205,16 +212,20 @@ export class OrderAggregator {
       }
     }
 
+    const priceSource = options.priceSource ?? (latestEvent.orderType === 'MARKET' ? 'average' : 'order');
+
     const payload: OrderNotificationInput = {
       scenario,
       symbol: latestEvent.symbol,
       side: latestEvent.side,
+      source: context.source,
       stateLabel: options.stateLabel,
       size: latestEvent.originalQuantity,
       cumulativeQuantity: options.includeCumulative && cumulativeQty.gt(0)
         ? cumulativeQty.toString()
         : undefined,
       displayPrice,
+      priceSource,
       notifyTime: new Date(),
       orderType: latestEvent.orderType,
       status: latestEvent.status,
@@ -229,4 +240,10 @@ export class OrderAggregator {
     logger.debug({ key }, 'Clearing aggregation context');
     this.tracker.delete(event);
   }
+}
+
+interface EmitOptions {
+  stateLabel: string;
+  includeCumulative: boolean;
+  priceSource?: 'average' | 'order';
 }
