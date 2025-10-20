@@ -7,6 +7,8 @@ import { buildPositionAlertCard } from '../notifications/positionCardBuilder.js'
 import { FeishuNotifier } from '../notifications/notifier.js';
 import { logger } from '../utils/logger.js';
 
+const POSITION_ALERT_WEBHOOK = 'https://open.feishu.cn/open-apis/bot/v2/hook/ed82732d-cd38-41f3-bb50-c2d9cfd081a4';
+
 interface PositionValidationServiceOptions {
   fetcher?: BinanceAccountFetcher;
   ruleEngine?: PositionRuleEngine;
@@ -73,7 +75,7 @@ export class PositionValidationService {
     this.fetcher = options?.fetcher ?? new BinanceAccountFetcher();
     this.ruleEngine = options?.ruleEngine ?? new PositionRuleEngine();
     this.alertLimiter = options?.alertLimiter ?? new AlertLimiter();
-    this.notifier = options?.notifier ?? new FeishuNotifier();
+    this.notifier = options?.notifier ?? new FeishuNotifier({ webhookUrl: POSITION_ALERT_WEBHOOK });
     this.intervalMs = options?.intervalMs ?? appConfig.positionValidationIntervalMs;
   }
 
