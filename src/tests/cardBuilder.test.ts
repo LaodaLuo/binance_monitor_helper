@@ -50,6 +50,7 @@ describe('buildFeishuCard', () => {
     });
 
     const card = payload.card as any;
+    expect(card.header.title.content).toBe('ETHUSDT-止损');
     const directionField = card.elements[1].fields[0].text.content;
     expect(directionField).toContain('方向');
     expect(directionField).toContain('买入');

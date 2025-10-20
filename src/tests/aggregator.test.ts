@@ -25,7 +25,8 @@ const BASE_EVENT = {
     l: '1',
     ap: '45000',
     L: '45000',
-    p: '45000',
+    p: '0',
+    sp: '45000',
     m: false,
     T: Date.now()
   }
@@ -42,6 +43,12 @@ function buildEvent(overrides: Partial<typeof BASE_EVENT['o']>, extra?: Partial<
       ...overrides
     }
   };
+  if (raw.o.sp === undefined) {
+    (raw.o as any).sp = undefined;
+  }
+  if (raw.o.p === undefined) {
+    (raw.o as any).p = undefined;
+  }
   return toOrderEvent(raw as any);
 }
 
@@ -77,7 +84,7 @@ describe('OrderAggregator', () => {
   });
 
   it('handles 普通订单一次性全部成交', async () => {
-    const event = buildEvent({ o: 'LIMIT', X: 'FILLED', q: '1', z: '1', l: '1', c: 'ORD-1' });
+    const event = buildEvent({ o: 'LIMIT', X: 'FILLED', q: '1', z: '1', l: '1', c: 'ORD-1', p: '45000', sp: undefined });
     await aggregator.handleEvent(event);
 
     expect(notifications).toHaveLength(1);
@@ -87,11 +94,12 @@ describe('OrderAggregator', () => {
     expect(notifications[0].stateLabel).toBe('成交');
     expect(notifications[0].cumulativeQuantity).toBe('1');
     expect(notifications[0].priceSource).toBe('average');
+    expect(notifications[0].displayPrice).toBe('45000.00000000');
   });
 
   it('handles 普通订单分批成交且 10 秒内全部完成', async () => {
-    const partial = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.5', l: '0.5', c: 'ORD-2' });
-    const filled = buildEvent({ o: 'LIMIT', X: 'FILLED', z: '1', l: '0.5', c: 'ORD-2' });
+    const partial = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.5', l: '0.5', c: 'ORD-2', p: '45000', sp: undefined });
+    const filled = buildEvent({ o: 'LIMIT', X: 'FILLED', z: '1', l: '0.5', c: 'ORD-2', p: '45000', sp: undefined });
 
     await aggregator.handleEvent(partial);
     await aggregator.handleEvent(filled);
@@ -101,10 +109,11 @@ describe('OrderAggregator', () => {
     expect(notifications[0].source).toBe('其他');
     expect(notifications[0].cumulativeQuantity).toBe('1');
     expect(notifications[0].priceSource).toBe('average');
+    expect(notifications[0].displayPrice).toBe('45000.00000000');
   });
 
   it('handles 普通订单分批成交但 10 秒内无新增成交', async () => {
-    const partial = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.3', l: '0.3', c: 'ORD-3' });
+    const partial = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.3', l: '0.3', c: 'ORD-3', p: '45000', sp: undefined });
     await aggregator.handleEvent(partial);
 
     vi.advanceTimersByTime(1000);
@@ -116,10 +125,20 @@ describe('OrderAggregator', () => {
     expect(notifications[0].source).toBe('其他');
     expect(notifications[0].cumulativeQuantity).toBe('0.3');
     expect(notifications[0].priceSource).toBe('average');
+    expect(notifications[0].displayPrice).toBe('45000.00000000');
   });
 
   it('handles SL/TP 创建', async () => {
-    const event = buildEvent({ o: 'STOP_MARKET', X: 'NEW', x: 'NEW', p: '43000', c: 'SL123', q: '2', z: '0' });
+    const event = buildEvent({
+      o: 'STOP_MARKET',
+      X: 'NEW',
+      x: 'NEW',
+      p: '0',
+      sp: '43000',
+      c: 'SL123',
+      q: '2',
+      z: '0'
+    });
     await aggregator.handleEvent(event);
 
     expect(notifications).toHaveLength(1);
@@ -128,10 +147,19 @@ describe('OrderAggregator', () => {
     expect(notifications[0].stateLabel).toBe('创建');
     expect(notifications[0].cumulativeQuantity).toBeUndefined();
     expect(notifications[0].priceSource).toBe('order');
+    expect(notifications[0].displayPrice).toBe('43000');
   });
 
   it('handles SL/TP 取消', async () => {
-    const event = buildEvent({ o: 'STOP_MARKET', X: 'CANCELED', x: 'CANCELED', p: '43000', c: 'SL999', z: '0' });
+    const event = buildEvent({
+      o: 'STOP_MARKET',
+      X: 'CANCELED',
+      x: 'CANCELED',
+      p: '0',
+      sp: '43500',
+      c: 'SL999',
+      z: '0'
+    });
     await aggregator.handleEvent(event);
 
     expect(notifications).toHaveLength(1);
@@ -140,6 +168,7 @@ describe('OrderAggregator', () => {
     expect(notifications[0].stateLabel).toBe('取消');
     expect(notifications[0].cumulativeQuantity).toBeUndefined();
     expect(notifications[0].priceSource).toBe('order');
+    expect(notifications[0].displayPrice).toBe('43500');
   });
 
   it('handles SL/TP 完全成交', async () => {
@@ -200,15 +229,15 @@ describe('OrderAggregator', () => {
   });
 
   it('ignores 非 SL/TP 的 NEW 状态', async () => {
-    const event = buildEvent({ o: 'LIMIT', X: 'NEW', x: 'NEW', c: 'ORD-IGNORED' });
+    const event = buildEvent({ o: 'LIMIT', X: 'NEW', x: 'NEW', c: 'ORD-IGNORED', sp: undefined, p: '45000' });
     await aggregator.handleEvent(event);
 
     expect(notifications).toHaveLength(0);
   });
 
   it('handles 普通订单部分成交后取消', async () => {
-    const partial = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.2', l: '0.2', c: 'ORD-4' });
-    const cancel = buildEvent({ o: 'LIMIT', X: 'CANCELED', z: '0.2', l: '0', c: 'ORD-4' });
+    const partial = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.2', l: '0.2', c: 'ORD-4', p: '45000', sp: undefined });
+    const cancel = buildEvent({ o: 'LIMIT', X: 'CANCELED', z: '0.2', l: '0', c: 'ORD-4', p: '45000', sp: undefined });
 
     await aggregator.handleEvent(partial);
     await aggregator.handleEvent(cancel);
@@ -219,10 +248,11 @@ describe('OrderAggregator', () => {
     expect(notifications[0].stateLabel).toBe('取消');
     expect(notifications[0].cumulativeQuantity).toBe('0.2');
     expect(notifications[0].priceSource).toBe('average');
+    expect(notifications[0].displayPrice).toBe('45000.00000000');
   });
 
   it('ignores SL/TP 触发生成的执行单创建', async () => {
-    const triggerNew = buildEvent({ o: 'MARKET', X: 'NEW', x: 'NEW', l: '0', z: '0', c: 'TP-TRIG' });
+    const triggerNew = buildEvent({ o: 'MARKET', X: 'NEW', x: 'NEW', l: '0', z: '0', c: 'TP-TRIG', sp: undefined, p: '0' });
     await aggregator.handleEvent(triggerNew);
     expect(notifications).toHaveLength(0);
   });

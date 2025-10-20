@@ -206,6 +206,13 @@ export class OrderAggregator {
     const cumulativeQty = new Big(context.cumulativeQuantity || '0');
     const cumulativeQuote = new Big(context.cumulativeQuote || '0');
 
+    const stopPriceCandidate =
+      (latestEvent.stopPrice && latestEvent.stopPrice !== '0' ? latestEvent.stopPrice : undefined) ||
+      [...context.events]
+        .reverse()
+        .map((evt) => evt.stopPrice)
+        .find((price) => price && price !== '0');
+
     let displayPrice = latestEvent.orderPrice;
     if (options.priceSource === 'average' || latestEvent.orderType === 'MARKET') {
       if (cumulativeQty.gt(0) && cumulativeQuote.gt(0)) {
@@ -214,6 +221,14 @@ export class OrderAggregator {
         displayPrice = context.lastAveragePrice;
       } else if (latestEvent.averagePrice !== '0') {
         displayPrice = latestEvent.averagePrice;
+      } else if (stopPriceCandidate) {
+        displayPrice = stopPriceCandidate;
+      }
+    } else {
+      if (!displayPrice || displayPrice === '0') {
+        if (stopPriceCandidate) {
+          displayPrice = stopPriceCandidate;
+        }
       }
     }
 
