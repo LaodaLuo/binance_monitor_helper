@@ -23,15 +23,10 @@ describe('buildFeishuCard', () => {
     expect(payload.msg_type).toBe('interactive');
     const card = payload.card as any;
     const header = card.header;
-    expect(header.title.content).toBe('交易对 BTCUSDT');
-    const pairField = card.elements[1].fields[0].text.content;
-    expect(pairField).toContain('交易对');
-    const directionField = card.elements[1].fields[1].text.content;
+    expect(header.title.content).toBe('BTCUSDT-其他');
+    const directionField = card.elements[1].fields[0].text.content;
     expect(directionField).toContain('方向');
     expect(directionField).toContain('买入');
-    const sourceField = card.elements[1].fields[2].text.content;
-    expect(sourceField).toContain('来源');
-    expect(sourceField).toContain('其他');
     const sizeField = card.elements[2].fields[0].text.content;
     expect(sizeField).toContain('Size');
     const priceText = card.elements[3].text.content;
@@ -49,18 +44,15 @@ describe('buildFeishuCard', () => {
       displayPrice: '2300',
       priceSource: 'order',
       notifyTime: new Date('2024-01-01T00:00:00Z'),
-      orderType: 'LIMIT',
+      orderType: 'STOP_MARKET',
       status: 'NEW',
       rawEvents: []
     });
 
     const card = payload.card as any;
-    const directionField = card.elements[1].fields[1].text.content;
+    const directionField = card.elements[1].fields[0].text.content;
     expect(directionField).toContain('方向');
     expect(directionField).toContain('买入');
-    const sourceField = card.elements[1].fields[2].text.content;
-    expect(sourceField).toContain('来源');
-    expect(sourceField).toContain('止损');
     const priceText = card.elements[3].text.content;
     expect(priceText).toContain('价格');
     expect(priceText).not.toContain('平均');

@@ -45,21 +45,7 @@ export function buildFeishuCard(input: OrderNotificationInput): CardPayload {
         is_short: true,
         text: {
           tag: 'lark_md',
-          content: `**交易对:**\n${input.symbol}`
-        }
-      },
-      {
-        is_short: true,
-        text: {
-          tag: 'lark_md',
           content: `**方向:**\n${resolveDirection(input.side)}`
-        }
-      },
-      {
-        is_short: true,
-        text: {
-          tag: 'lark_md',
-          content: `**来源:**\n${input.source}`
         }
       }
     ]
@@ -119,7 +105,7 @@ export function buildFeishuCard(input: OrderNotificationInput): CardPayload {
         template: resolveTemplate(input.stateLabel),
         title: {
           tag: 'plain_text',
-          content: `交易对 ${input.symbol}`
+          content: `${input.symbol}-${input.source}`
         }
       },
       elements
