@@ -12,13 +12,22 @@ const listenKeyClient = ListenKeyClient.createDefault();
 const streamClient = new StreamClient();
 const aggregator = new OrderAggregator();
 const notifier = new FeishuNotifier();
+const secondaryNotifier = new FeishuNotifier({
+  webhookUrl: appConfig.feishuSecondaryWebhookUrl
+});
 
 let listenKey: string;
 let keepAliveTimer: NodeJS.Timeout | undefined;
 
+const shouldSendToSecondary = (stateLabel: string): boolean =>
+  stateLabel.includes('创建') || stateLabel.includes('取消');
+
 aggregator.onNotify(async (notification) => {
   const card = buildFeishuCard(notification);
   await notifier.send(card);
+  if (shouldSendToSecondary(notification.stateLabel)) {
+    await secondaryNotifier.send(card);
+  }
 });
 
 async function initListenKey(): Promise<string> {
