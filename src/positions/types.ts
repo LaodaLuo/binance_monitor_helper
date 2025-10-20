@@ -24,8 +24,9 @@ export interface AccountContext {
 }
 
 export type ValidationRuleType =
-  | 'required_position'
-  | 'forbidden_position'
+  | 'whitelist_violation'
+  | 'blacklist_violation'
+  | 'config_error'
   | 'leverage_limit'
   | 'margin_share_limit'
   | 'total_margin_usage'

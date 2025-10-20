@@ -1,5 +1,9 @@
 {
   "defaults": {
+    "whitelistLong": ["BTC"],
+    "whitelistShort": [],
+    "blacklistLong": [],
+    "blacklistShort": ["BTC"],
     "maxLeverage": 3,
     "maxMarginShare": 0.05,
     "fundingThresholdShort": -0.002,
@@ -7,25 +11,27 @@
     "cooldownMinutes": 60,
     "notifyRecovery": false,
     "minFundingRateDelta": 0,
-    "totalMarginUsageLimit": 1,
-    "requireLongAssets": ["BTC"],
-    "requireShortAssets": [],
-    "forbidLongAssets": [],
-    "forbidShortAssets": ["BTC"]
+    "totalMarginUsageLimit": 1
   },
   "overrides": {
     "BTC": {
+      "whitelistShort": ["BTC"],
+      "blacklistShort": [],
       "maxLeverage": 10,
       "maxMarginShare": 0.5,
       "fundingThresholdShort": -0.001,
       "notifyRecovery": true
     },
     "ETH": {
-      "requireLong": false,
-      "requireShort": true,
+      "whitelistLong": ["ETH"],
+      "blacklistShort": [],
       "cooldownMinutes": 15,
       "maxMarginShare": 0.02,
       "fundingThresholdShort": -0.0005
+    },
+    "DOGE": {
+      "blacklistLong": ["DOGE"],
+      "blacklistShort": ["DOGE"]
     }
   }
 }

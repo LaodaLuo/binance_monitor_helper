@@ -4,11 +4,13 @@ import { z } from 'zod';
 
 const DEFAULT_CONFIG_PATH = 'config/position-rules.json';
 
+const listSchema = z.array(z.string());
+
 const assetRuleSchema = z.object({
-  requireLong: z.boolean().optional(),
-  requireShort: z.boolean().optional(),
-  forbidLong: z.boolean().optional(),
-  forbidShort: z.boolean().optional(),
+  whitelistLong: listSchema.optional(),
+  whitelistShort: listSchema.optional(),
+  blacklistLong: listSchema.optional(),
+  blacklistShort: listSchema.optional(),
   maxLeverage: z
     .number()
     .positive()
@@ -33,10 +35,6 @@ const assetRuleSchema = z.object({
 });
 
 const defaultsSchema = assetRuleSchema.extend({
-  requireLongAssets: z.array(z.string()).default([]),
-  requireShortAssets: z.array(z.string()).default([]),
-  forbidLongAssets: z.array(z.string()).default([]),
-  forbidShortAssets: z.array(z.string()).default([]),
   totalMarginUsageLimit: z
     .number()
     .positive()
@@ -64,10 +62,10 @@ type AssetRuleInput = z.infer<typeof assetRuleSchema>;
 type DefaultsInput = z.infer<typeof defaultsSchema>;
 
 export interface NormalizedAssetRule {
-  requireLong?: boolean;
-  requireShort?: boolean;
-  forbidLong?: boolean;
-  forbidShort?: boolean;
+  whitelistLong?: string[] | null;
+  whitelistShort?: string[] | null;
+  blacklistLong?: string[] | null;
+  blacklistShort?: string[] | null;
   maxLeverage?: number | null;
   maxMarginShare?: number | null;
   fundingThresholdLong?: number | null;
@@ -79,10 +77,10 @@ export interface NormalizedAssetRule {
 
 export interface ResolvedAssetRule {
   baseAsset: string;
-  requireLong: boolean;
-  requireShort: boolean;
-  forbidLong: boolean;
-  forbidShort: boolean;
+  whitelistLong: Set<string> | null;
+  whitelistShort: Set<string> | null;
+  blacklistLong: Set<string> | null;
+  blacklistShort: Set<string> | null;
   maxLeverage: number | null;
   maxMarginShare: number | null;
   fundingThresholdLong: number | null;
@@ -94,6 +92,10 @@ export interface ResolvedAssetRule {
 
 export interface NormalizedPositionRulesConfig {
   defaults: {
+    whitelistLong: string[] | null;
+    whitelistShort: string[] | null;
+    blacklistLong: string[] | null;
+    blacklistShort: string[] | null;
     maxLeverage: number | null;
     maxMarginShare: number | null;
     fundingThresholdLong: number | null;
@@ -103,10 +105,6 @@ export interface NormalizedPositionRulesConfig {
     minFundingRateDelta: number;
     totalMarginUsageLimit: number | null;
   };
-  requiredLongAssets: Set<string>;
-  requiredShortAssets: Set<string>;
-  forbiddenLongAssets: Set<string>;
-  forbiddenShortAssets: Set<string>;
   overrides: Record<string, NormalizedAssetRule>;
   configuredAssets: Set<string>;
 }
@@ -131,17 +129,24 @@ function readConfigFile(): unknown {
   }
 }
 
-function normalizeDefaults(raw: Partial<DefaultsInput> | undefined): NormalizedPositionRulesConfig['defaults'] & {
-  requireLongAssets: Set<string>;
-  requireShortAssets: Set<string>;
-  forbidLongAssets: Set<string>;
-  forbidShortAssets: Set<string>;
-} {
-  const requireLongAssets = new Set((raw?.requireLongAssets ?? []).map(normalizeAssetId));
-  const requireShortAssets = new Set((raw?.requireShortAssets ?? []).map(normalizeAssetId));
-  const forbidLongAssets = new Set((raw?.forbidLongAssets ?? []).map(normalizeAssetId));
-  const forbidShortAssets = new Set((raw?.forbidShortAssets ?? []).map(normalizeAssetId));
+function normalizeDefaultList(list?: string[]): string[] | null {
+  if (!list || list.length === 0) {
+    return null;
+  }
+  return list.map(normalizeAssetId);
+}
 
+function normalizeOverrideList(list?: string[]): string[] | null | undefined {
+  if (list === undefined) {
+    return undefined;
+  }
+  if (list.length === 0) {
+    return null;
+  }
+  return list.map(normalizeAssetId);
+}
+
+function normalizeDefaults(raw: Partial<DefaultsInput> | undefined): NormalizedPositionRulesConfig['defaults'] {
   const maxLeverage = raw?.maxLeverage === undefined ? FALLBACK_DEFAULTS.maxLeverage : raw.maxLeverage;
   const maxMarginShare =
     raw?.maxMarginShare === undefined ? FALLBACK_DEFAULTS.maxMarginShare : raw.maxMarginShare;
@@ -154,7 +159,9 @@ function normalizeDefaults(raw: Partial<DefaultsInput> | undefined): NormalizedP
       ? FALLBACK_DEFAULTS.fundingThresholdShort
       : raw.fundingThresholdShort;
   const cooldownMinutes =
-    raw?.cooldownMinutes === undefined ? FALLBACK_DEFAULTS.cooldownMinutes : raw.cooldownMinutes ?? FALLBACK_DEFAULTS.cooldownMinutes;
+    raw?.cooldownMinutes === undefined
+      ? FALLBACK_DEFAULTS.cooldownMinutes
+      : raw.cooldownMinutes ?? FALLBACK_DEFAULTS.cooldownMinutes;
   const notifyRecovery =
     raw?.notifyRecovery === undefined ? FALLBACK_DEFAULTS.notifyRecovery : raw.notifyRecovery;
   const minFundingRateDelta =
@@ -167,6 +174,10 @@ function normalizeDefaults(raw: Partial<DefaultsInput> | undefined): NormalizedP
       : raw.totalMarginUsageLimit;
 
   return {
+    whitelistLong: normalizeDefaultList(raw?.whitelistLong),
+    whitelistShort: normalizeDefaultList(raw?.whitelistShort),
+    blacklistLong: normalizeDefaultList(raw?.blacklistLong),
+    blacklistShort: normalizeDefaultList(raw?.blacklistShort),
     maxLeverage,
     maxMarginShare,
     fundingThresholdLong,
@@ -174,31 +185,35 @@ function normalizeDefaults(raw: Partial<DefaultsInput> | undefined): NormalizedP
     cooldownMinutes: cooldownMinutes ?? FALLBACK_DEFAULTS.cooldownMinutes,
     notifyRecovery,
     minFundingRateDelta: minFundingRateDelta ?? FALLBACK_DEFAULTS.minFundingRateDelta,
-    totalMarginUsageLimit,
-    requireLongAssets,
-    requireShortAssets,
-    forbidLongAssets,
-    forbidShortAssets
+    totalMarginUsageLimit
   };
 }
 
 function normalizeOverrides(raw: Record<string, AssetRuleInput>): Record<string, NormalizedAssetRule> {
-  const normalizedEntries: [string, NormalizedAssetRule][] = Object.entries(raw).map(([asset, rule]) => [
-    normalizeAssetId(asset),
-    {
-      requireLong: rule.requireLong,
-      requireShort: rule.requireShort,
-      forbidLong: rule.forbidLong,
-      forbidShort: rule.forbidShort,
-      maxLeverage: rule.maxLeverage,
-      maxMarginShare: rule.maxMarginShare,
-      fundingThresholdLong: rule.fundingThresholdLong,
-      fundingThresholdShort: rule.fundingThresholdShort,
-      cooldownMinutes: rule.cooldownMinutes ?? undefined,
-      notifyRecovery: rule.notifyRecovery,
-      minFundingRateDelta: rule.minFundingRateDelta
-    }
-  ]);
+  const normalizedEntries: [string, NormalizedAssetRule][] = Object.entries(raw).map(([asset, rule]) => {
+    const normalized: NormalizedAssetRule = {};
+    const whitelistLong = normalizeOverrideList(rule.whitelistLong);
+    if (whitelistLong !== undefined) normalized.whitelistLong = whitelistLong;
+    const whitelistShort = normalizeOverrideList(rule.whitelistShort);
+    if (whitelistShort !== undefined) normalized.whitelistShort = whitelistShort;
+    const blacklistLong = normalizeOverrideList(rule.blacklistLong);
+    if (blacklistLong !== undefined) normalized.blacklistLong = blacklistLong;
+    const blacklistShort = normalizeOverrideList(rule.blacklistShort);
+    if (blacklistShort !== undefined) normalized.blacklistShort = blacklistShort;
+
+    if (rule.maxLeverage !== undefined) normalized.maxLeverage = rule.maxLeverage;
+    if (rule.maxMarginShare !== undefined) normalized.maxMarginShare = rule.maxMarginShare;
+    if (rule.fundingThresholdLong !== undefined)
+      normalized.fundingThresholdLong = rule.fundingThresholdLong;
+    if (rule.fundingThresholdShort !== undefined)
+      normalized.fundingThresholdShort = rule.fundingThresholdShort;
+    if (rule.cooldownMinutes !== undefined) normalized.cooldownMinutes = rule.cooldownMinutes;
+    if (rule.notifyRecovery !== undefined) normalized.notifyRecovery = rule.notifyRecovery;
+    if (rule.minFundingRateDelta !== undefined)
+      normalized.minFundingRateDelta = rule.minFundingRateDelta;
+
+    return [normalizeAssetId(asset), normalized];
+  });
 
   return Object.fromEntries(normalizedEntries);
 }
@@ -215,60 +230,30 @@ const rawDefaults = parsedConfig.data.defaults;
 const normalizedDefaults = normalizeDefaults(rawDefaults);
 const normalizedOverrides = normalizeOverrides(parsedConfig.data.overrides);
 
-const requiredLongAssets = new Set(normalizedDefaults.requireLongAssets);
-const requiredShortAssets = new Set(normalizedDefaults.requireShortAssets);
-const forbiddenLongAssets = new Set(normalizedDefaults.forbidLongAssets);
-const forbiddenShortAssets = new Set(normalizedDefaults.forbidShortAssets);
+const configuredAssets = new Set<string>();
 
-for (const [asset, overrideRule] of Object.entries(normalizedOverrides)) {
-  if (overrideRule.requireLong === true) {
-    requiredLongAssets.add(asset);
-  } else if (overrideRule.requireLong === false) {
-    requiredLongAssets.delete(asset);
-  }
-
-  if (overrideRule.requireShort === true) {
-    requiredShortAssets.add(asset);
-  } else if (overrideRule.requireShort === false) {
-    requiredShortAssets.delete(asset);
-  }
-
-  if (overrideRule.forbidLong === true) {
-    forbiddenLongAssets.add(asset);
-  } else if (overrideRule.forbidLong === false) {
-    forbiddenLongAssets.delete(asset);
-  }
-
-  if (overrideRule.forbidShort === true) {
-    forbiddenShortAssets.add(asset);
-  } else if (overrideRule.forbidShort === false) {
-    forbiddenShortAssets.delete(asset);
+function collect(list: string[] | null | undefined): void {
+  if (!list) return;
+  for (const asset of list) {
+    configuredAssets.add(asset);
   }
 }
 
-const configuredAssets = new Set<string>([
-  ...requiredLongAssets,
-  ...requiredShortAssets,
-  ...forbiddenLongAssets,
-  ...forbiddenShortAssets,
-  ...Object.keys(normalizedOverrides)
-]);
+collect(normalizedDefaults.whitelistLong);
+collect(normalizedDefaults.whitelistShort);
+collect(normalizedDefaults.blacklistLong);
+collect(normalizedDefaults.blacklistShort);
+
+for (const [asset, rule] of Object.entries(normalizedOverrides)) {
+  configuredAssets.add(asset);
+  collect(rule.whitelistLong);
+  collect(rule.whitelistShort);
+  collect(rule.blacklistLong);
+  collect(rule.blacklistShort);
+}
 
 export const positionRulesConfig: NormalizedPositionRulesConfig = {
-  defaults: {
-    maxLeverage: normalizedDefaults.maxLeverage,
-    maxMarginShare: normalizedDefaults.maxMarginShare,
-    fundingThresholdLong: normalizedDefaults.fundingThresholdLong,
-    fundingThresholdShort: normalizedDefaults.fundingThresholdShort,
-    cooldownMinutes: normalizedDefaults.cooldownMinutes,
-    notifyRecovery: normalizedDefaults.notifyRecovery,
-    minFundingRateDelta: normalizedDefaults.minFundingRateDelta,
-    totalMarginUsageLimit: normalizedDefaults.totalMarginUsageLimit
-  },
-  requiredLongAssets,
-  requiredShortAssets,
-  forbiddenLongAssets,
-  forbiddenShortAssets,
+  defaults: normalizedDefaults,
   overrides: normalizedOverrides,
   configuredAssets
 };
@@ -277,22 +262,27 @@ function overrideHasKey<T extends keyof NormalizedAssetRule>(rule: NormalizedAss
   return rule ? Object.prototype.hasOwnProperty.call(rule, key) : false;
 }
 
+function toSet(list: string[] | null | undefined): Set<string> | null {
+  if (!list) return null;
+  return new Set(list);
+}
+
 export function resolvePositionRule(baseAsset: string): ResolvedAssetRule {
   const assetKey = normalizeAssetId(baseAsset);
   const override = positionRulesConfig.overrides[assetKey];
 
-  const requireLong = overrideHasKey(override, 'requireLong')
-    ? Boolean(override?.requireLong)
-    : positionRulesConfig.requiredLongAssets.has(assetKey);
-  const requireShort = overrideHasKey(override, 'requireShort')
-    ? Boolean(override?.requireShort)
-    : positionRulesConfig.requiredShortAssets.has(assetKey);
-  const forbidLong = overrideHasKey(override, 'forbidLong')
-    ? Boolean(override?.forbidLong)
-    : positionRulesConfig.forbiddenLongAssets.has(assetKey);
-  const forbidShort = overrideHasKey(override, 'forbidShort')
-    ? Boolean(override?.forbidShort)
-    : positionRulesConfig.forbiddenShortAssets.has(assetKey);
+  const whitelistLong = overrideHasKey(override, 'whitelistLong')
+    ? toSet(override?.whitelistLong ?? null)
+    : toSet(positionRulesConfig.defaults.whitelistLong);
+  const whitelistShort = overrideHasKey(override, 'whitelistShort')
+    ? toSet(override?.whitelistShort ?? null)
+    : toSet(positionRulesConfig.defaults.whitelistShort);
+  const blacklistLong = overrideHasKey(override, 'blacklistLong')
+    ? toSet(override?.blacklistLong ?? null)
+    : toSet(positionRulesConfig.defaults.blacklistLong);
+  const blacklistShort = overrideHasKey(override, 'blacklistShort')
+    ? toSet(override?.blacklistShort ?? null)
+    : toSet(positionRulesConfig.defaults.blacklistShort);
 
   const maxLeverage = overrideHasKey(override, 'maxLeverage')
     ? (override?.maxLeverage ?? null)
@@ -318,10 +308,10 @@ export function resolvePositionRule(baseAsset: string): ResolvedAssetRule {
 
   return {
     baseAsset: assetKey,
-    requireLong,
-    requireShort,
-    forbidLong,
-    forbidShort,
+    whitelistLong,
+    whitelistShort,
+    blacklistLong,
+    blacklistShort,
     maxLeverage,
     maxMarginShare,
     fundingThresholdLong,

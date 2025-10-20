@@ -37,63 +37,112 @@ export class PositionRuleEngine {
       const rule = resolvePositionRule(asset);
       const positions = grouped.get(asset) ?? { long: [], short: [] };
 
-      if (rule.requireLong && positions.long.length === 0) {
+      const whitelistLong = rule.whitelistLong;
+      const whitelistShort = rule.whitelistShort;
+      const blacklistLong = rule.blacklistLong;
+      const blacklistShort = rule.blacklistShort;
+
+      if (whitelistLong && whitelistLong.has(asset) && blacklistLong && blacklistLong.has(asset)) {
         issues.push({
-          rule: 'required_position',
+          rule: 'config_error',
           baseAsset: asset,
           direction: 'long',
           severity: 'critical',
-          message: `${asset} 多头持仓缺失，配置要求必须持有`,
+          message: `${asset} 多头同时存在白名单与黑名单配置，需检查配置冲突`,
           cooldownMinutes: rule.cooldownMinutes,
           notifyOnRecovery: rule.notifyRecovery,
-          value: 0,
-          threshold: 1,
-          details: {}
+          details: {
+            whitelist: Array.from(whitelistLong),
+            blacklist: Array.from(blacklistLong)
+          }
         });
       }
 
-      if (rule.requireShort && positions.short.length === 0) {
+      if (whitelistShort && whitelistShort.has(asset) && blacklistShort && blacklistShort.has(asset)) {
         issues.push({
-          rule: 'required_position',
+          rule: 'config_error',
           baseAsset: asset,
           direction: 'short',
           severity: 'critical',
-          message: `${asset} 空头持仓缺失，配置要求必须持有`,
+          message: `${asset} 空头同时存在白名单与黑名单配置，需检查配置冲突`,
           cooldownMinutes: rule.cooldownMinutes,
           notifyOnRecovery: rule.notifyRecovery,
-          value: 0,
-          threshold: 1,
-          details: {}
+          details: {
+            whitelist: Array.from(whitelistShort),
+            blacklist: Array.from(blacklistShort)
+          }
         });
       }
 
-      if (rule.forbidLong && positions.long.length > 0) {
+      if (whitelistLong && !whitelistLong.has(asset) && positions.long.length > 0) {
         const symbols = positions.long.map((pos) => pos.symbol).join(', ');
         issues.push({
-          rule: 'forbidden_position',
+          rule: 'whitelist_violation',
           baseAsset: asset,
           direction: 'long',
           severity: 'critical',
-          message: `${asset} 多头持仓被禁止，但当前持有 ${symbols}`,
+          message: `${asset} 多头不在白名单内，当前持仓包括 ${symbols}`,
           cooldownMinutes: rule.cooldownMinutes,
           notifyOnRecovery: rule.notifyRecovery,
           value: aggregateNotional(positions.long),
-          details: { symbols }
+          details: {
+            symbols,
+            whitelist: Array.from(whitelistLong)
+          }
         });
       }
 
-      if (rule.forbidShort && positions.short.length > 0) {
+      if (whitelistShort && !whitelistShort.has(asset) && positions.short.length > 0) {
         const symbols = positions.short.map((pos) => pos.symbol).join(', ');
         issues.push({
-          rule: 'forbidden_position',
+          rule: 'whitelist_violation',
           baseAsset: asset,
           direction: 'short',
           severity: 'critical',
-          message: `${asset} 空头持仓被禁止，但当前持有 ${symbols}`,
+          message: `${asset} 空头不在白名单内，当前持仓包括 ${symbols}`,
           cooldownMinutes: rule.cooldownMinutes,
           notifyOnRecovery: rule.notifyRecovery,
           value: aggregateNotional(positions.short),
-          details: { symbols }
+          details: {
+            symbols,
+            whitelist: Array.from(whitelistShort)
+          }
+        });
+      }
+
+      if (blacklistLong && blacklistLong.has(asset) && positions.long.length > 0) {
+        const symbols = positions.long.map((pos) => pos.symbol).join(', ');
+        issues.push({
+          rule: 'blacklist_violation',
+          baseAsset: asset,
+          direction: 'long',
+          severity: 'critical',
+          message: `${asset} 多头被列入黑名单，但当前持有 ${symbols}`,
+          cooldownMinutes: rule.cooldownMinutes,
+          notifyOnRecovery: rule.notifyRecovery,
+          value: aggregateNotional(positions.long),
+          details: {
+            symbols,
+            blacklist: Array.from(blacklistLong)
+          }
+        });
+      }
+
+      if (blacklistShort && blacklistShort.has(asset) && positions.short.length > 0) {
+        const symbols = positions.short.map((pos) => pos.symbol).join(', ');
+        issues.push({
+          rule: 'blacklist_violation',
+          baseAsset: asset,
+          direction: 'short',
+          severity: 'critical',
+          message: `${asset} 空头被列入黑名单，但当前持有 ${symbols}`,
+          cooldownMinutes: rule.cooldownMinutes,
+          notifyOnRecovery: rule.notifyRecovery,
+          value: aggregateNotional(positions.short),
+          details: {
+            symbols,
+            blacklist: Array.from(blacklistShort)
+          }
         });
       }
 

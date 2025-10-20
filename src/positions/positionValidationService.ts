@@ -18,8 +18,9 @@ interface PositionValidationServiceOptions {
 }
 
 const RULE_LABEL_MAP: Record<ValidationIssue['rule'], string> = {
-  required_position: '白名单缺失',
-  forbidden_position: '黑名单违规',
+  whitelist_violation: '白名单限制',
+  blacklist_violation: '黑名单限制',
+  config_error: '配置异常',
   leverage_limit: '杠杆限制',
   margin_share_limit: '保证金占比',
   total_margin_usage: '总保证金使用率',
@@ -47,7 +48,7 @@ function resolveValueLabel(issue: ValidationIssue): string | undefined {
   if (issue.rule === 'leverage_limit' && typeof issue.value === 'number') {
     return issue.value.toFixed(2);
   }
-  if (issue.rule === 'forbidden_position' && typeof issue.value === 'number') {
+  if ((issue.rule === 'whitelist_violation' || issue.rule === 'blacklist_violation') && typeof issue.value === 'number') {
     return issue.value.toFixed(2);
   }
   return undefined;
@@ -128,6 +129,12 @@ export class PositionValidationService {
     }
     if (issue.details?.symbol && typeof issue.details.symbol === 'string' && event.type !== 'recovery') {
       extraFields.push({ label: '交易对', value: issue.details.symbol });
+    }
+    if (issue.details?.whitelist && event.type !== 'recovery') {
+      extraFields.push({ label: '白名单', value: String(issue.details.whitelist) });
+    }
+    if (issue.details?.blacklist && event.type !== 'recovery') {
+      extraFields.push({ label: '黑名单', value: String(issue.details.blacklist) });
     }
 
     const message =
