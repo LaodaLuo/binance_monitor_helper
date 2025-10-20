@@ -249,13 +249,13 @@ export class PositionRuleEngine {
               notifyOnRecovery: rule.notifyRecovery,
               details: { symbol: position.symbol }
             });
-          } else if (position.predictedFundingRate < threshold) {
+          } else if (position.predictedFundingRate > threshold) {
             issues.push({
               rule: 'funding_rate_limit',
               baseAsset: asset,
               direction: 'long',
               severity: 'warning',
-              message: `${position.symbol} 多头资金费率 ${formatPercent(position.predictedFundingRate)} 低于阈值 ${formatPercent(threshold)}`,
+              message: `${position.symbol} 多头资金费率 ${formatPercent(position.predictedFundingRate)} 高于阈值 ${formatPercent(threshold)}`,
               cooldownMinutes: rule.cooldownMinutes,
               notifyOnRecovery: rule.notifyRecovery,
               value: position.predictedFundingRate,
