@@ -8,6 +8,7 @@ const SEVERITY_TEMPLATE: Record<ValidationSeverity, string> = {
 };
 
 export interface PositionAlertCardInput {
+  title: string;
   scopeLabel: string;
   statusLabel: string;
   severity: ValidationSeverity;
@@ -123,7 +124,7 @@ export function buildPositionAlertCard(input: PositionAlertCardInput): CardPaylo
         template: resolveTemplate(input.severity, input.statusLabel),
         title: {
           tag: 'plain_text',
-          content: `币安持仓-${input.scopeLabel}`
+          content: input.title
         }
       },
       elements

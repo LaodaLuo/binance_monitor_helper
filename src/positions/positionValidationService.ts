@@ -140,8 +140,12 @@ export class PositionValidationService {
     const message =
       event.type === 'recovery' ? `${ruleLabel} 告警已恢复，当前状态符合配置` : issue.message;
 
+    const scopeLabel = resolveScope(issue);
+    const title = `${ruleLabel} - ${scopeLabel}`;
+
     const card = buildPositionAlertCard({
-      scopeLabel: resolveScope(issue),
+      title,
+      scopeLabel,
       statusLabel,
       severity: issue.severity,
       ruleLabel,
