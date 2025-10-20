@@ -59,6 +59,11 @@ export class OrderAggregator {
   ): Promise<void> {
     switch (event.status) {
       case 'NEW': {
+        const triggerCreationTypes = ['MARKET', 'LIMIT'];
+        if (triggerCreationTypes.includes(event.orderType)) {
+          logger.debug({ event }, 'Ignoring triggered execution order creation');
+          return;
+        }
         await this.emitNotification(context, Scenario.SLTP_NEW, {
           stateLabel: '创建',
           includeCumulative: false,

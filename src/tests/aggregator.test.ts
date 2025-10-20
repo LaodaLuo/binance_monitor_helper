@@ -16,7 +16,7 @@ const BASE_EVENT = {
     s: 'BTCUSDT',
     c: 'TP-001',
     S: 'BUY',
-    o: 'LIMIT',
+    o: 'STOP_MARKET',
     x: 'TRADE',
     X: 'FILLED',
     i: 1,
@@ -119,7 +119,7 @@ describe('OrderAggregator', () => {
   });
 
   it('handles SL/TP 创建', async () => {
-    const event = buildEvent({ o: 'LIMIT', X: 'NEW', x: 'NEW', p: '43000', c: 'SL123', q: '2', z: '0' });
+    const event = buildEvent({ o: 'STOP_MARKET', X: 'NEW', x: 'NEW', p: '43000', c: 'SL123', q: '2', z: '0' });
     await aggregator.handleEvent(event);
 
     expect(notifications).toHaveLength(1);
@@ -131,7 +131,7 @@ describe('OrderAggregator', () => {
   });
 
   it('handles SL/TP 取消', async () => {
-    const event = buildEvent({ o: 'LIMIT', X: 'CANCELED', x: 'CANCELED', p: '43000', c: 'SL999', z: '0' });
+    const event = buildEvent({ o: 'STOP_MARKET', X: 'CANCELED', x: 'CANCELED', p: '43000', c: 'SL999', z: '0' });
     await aggregator.handleEvent(event);
 
     expect(notifications).toHaveLength(1);
@@ -143,7 +143,7 @@ describe('OrderAggregator', () => {
   });
 
   it('handles SL/TP 完全成交', async () => {
-    const event = buildEvent({ o: 'LIMIT', X: 'FILLED', z: '1', l: '1', c: 'TP-100' });
+    const event = buildEvent({ o: 'STOP_MARKET', X: 'FILLED', z: '1', l: '1', c: 'TP-100' });
     await aggregator.handleEvent(event);
 
     expect(notifications).toHaveLength(1);
@@ -155,8 +155,8 @@ describe('OrderAggregator', () => {
   });
 
   it('handles SL/TP 部分成交且 10 秒内完成', async () => {
-    const partial = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.6', l: '0.6', c: 'TP-200' });
-    const filled = buildEvent({ o: 'LIMIT', X: 'FILLED', z: '1', l: '0.4', c: 'TP-200' });
+    const partial = buildEvent({ o: 'STOP_MARKET', X: 'PARTIALLY_FILLED', z: '0.6', l: '0.6', c: 'TP-200' });
+    const filled = buildEvent({ o: 'STOP_MARKET', X: 'FILLED', z: '1', l: '0.4', c: 'TP-200' });
 
     await aggregator.handleEvent(partial);
     await aggregator.handleEvent(filled);
@@ -170,7 +170,7 @@ describe('OrderAggregator', () => {
   });
 
   it('handles SL/TP 部分成交但 10 秒内未补足', async () => {
-    const partial = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.4', l: '0.4', c: 'TP-300' });
+    const partial = buildEvent({ o: 'STOP_MARKET', X: 'PARTIALLY_FILLED', z: '0.4', l: '0.4', c: 'TP-300' });
     await aggregator.handleEvent(partial);
 
     vi.advanceTimersByTime(1000);
@@ -185,8 +185,8 @@ describe('OrderAggregator', () => {
   });
 
   it('handles SL/TP 部分成交后取消', async () => {
-    const partial = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.5', l: '0.5', c: 'TP-400' });
-    const cancel = buildEvent({ o: 'LIMIT', X: 'CANCELED', x: 'CANCELED', z: '0.5', l: '0', c: 'TP-400' });
+    const partial = buildEvent({ o: 'STOP_MARKET', X: 'PARTIALLY_FILLED', z: '0.5', l: '0.5', c: 'TP-400' });
+    const cancel = buildEvent({ o: 'STOP_MARKET', X: 'CANCELED', x: 'CANCELED', z: '0.5', l: '0', c: 'TP-400' });
 
     await aggregator.handleEvent(partial);
     await aggregator.handleEvent(cancel);
@@ -199,8 +199,8 @@ describe('OrderAggregator', () => {
     expect(notifications[0].priceSource).toBe('average');
   });
 
-  it('ignores 非 SL/TP 的非市价订单', async () => {
-    const event = buildEvent({ o: 'LIMIT', X: 'NEW', x: 'NEW', c: 'XX-1' });
+  it('ignores 非 SL/TP 的 NEW 状态', async () => {
+    const event = buildEvent({ o: 'LIMIT', X: 'NEW', x: 'NEW', c: 'ORD-IGNORED' });
     await aggregator.handleEvent(event);
 
     expect(notifications).toHaveLength(0);
@@ -219,5 +219,11 @@ describe('OrderAggregator', () => {
     expect(notifications[0].stateLabel).toBe('取消');
     expect(notifications[0].cumulativeQuantity).toBe('0.2');
     expect(notifications[0].priceSource).toBe('average');
+  });
+
+  it('ignores SL/TP 触发生成的执行单创建', async () => {
+    const triggerNew = buildEvent({ o: 'MARKET', X: 'NEW', x: 'NEW', l: '0', z: '0', c: 'TP-TRIG' });
+    await aggregator.handleEvent(triggerNew);
+    expect(notifications).toHaveLength(0);
   });
 });
