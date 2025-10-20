@@ -28,6 +28,10 @@ function resolveDirection(side: OrderNotificationInput['side']): string {
 }
 
 export function buildFeishuCard(input: OrderNotificationInput): CardPayload {
+  const amountDisplay = input.cumulativeQuoteDisplay ?? input.cumulativeQuote ?? '-';
+  const ratioDisplay = input.cumulativeQuoteRatioDisplay ?? input.cumulativeQuoteRatio ?? '-';
+  const pnlDisplay = input.tradePnlDisplay ?? input.tradePnl ?? '-';
+
   const elements: Record<string, unknown>[] = [];
 
   elements.push({
@@ -47,33 +51,35 @@ export function buildFeishuCard(input: OrderNotificationInput): CardPayload {
           tag: 'lark_md',
           content: `**方向:**\n${resolveDirection(input.side)}`
         }
+      },
+      {
+        is_short: true,
+        text: {
+          tag: 'lark_md',
+          content: `**累计成交金额:**\n${amountDisplay}`
+        }
       }
     ]
   });
 
-  const fields: Record<string, unknown>[] = [
-    {
-      is_short: true,
-      text: {
-        tag: 'lark_md',
-        content: `**Size:**\n${input.size}`
-      }
-    }
-  ];
-
-  if (input.cumulativeQuantity) {
-    fields.push({
-      is_short: true,
-      text: {
-        tag: 'lark_md',
-        content: `**累计成交量:**\n${input.cumulativeQuantity}`
-      }
-    });
-  }
-
   elements.push({
     tag: 'div',
-    fields
+    fields: [
+      {
+        is_short: true,
+        text: {
+          tag: 'lark_md',
+          content: `**累计成交金额占比:**\n${ratioDisplay}`
+        }
+      },
+      {
+        is_short: true,
+        text: {
+          tag: 'lark_md',
+          content: `**该笔交易累计PnL:**\n${pnlDisplay}`
+        }
+      }
+    ]
   });
 
   const priceLabel = input.priceSource === 'average' ? '平均成交价格' : '价格';
@@ -105,7 +111,7 @@ export function buildFeishuCard(input: OrderNotificationInput): CardPayload {
         template: resolveTemplate(input.stateLabel),
         title: {
           tag: 'plain_text',
-          content: `${input.symbol}-${input.source}`
+          content: input.title
         }
       },
       elements

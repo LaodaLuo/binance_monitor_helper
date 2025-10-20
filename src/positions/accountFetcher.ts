@@ -22,6 +22,7 @@ interface PositionRiskResponse {
   positionSide: 'LONG' | 'SHORT' | 'BOTH';
   markPrice: string;
   marginAsset: string;
+  entryPrice: string;
 }
 
 interface PremiumIndexResponse {
@@ -152,6 +153,7 @@ export class BinanceAccountFetcher {
     const isolatedMargin = Math.abs(toNumber(position.isolatedMargin));
     const leverage = Math.abs(toNumber(position.leverage));
     const markPrice = Math.abs(toNumber(position.markPrice));
+    const entryPrice = Math.abs(toNumber(position.entryPrice));
     const baseAsset = deriveBaseAsset(position.symbol, position.marginAsset);
     const marginType = position.marginType === 'isolated' ? 'isolated' : 'cross';
 
@@ -167,7 +169,9 @@ export class BinanceAccountFetcher {
       direction,
       markPrice,
       predictedFundingRate,
-      updatedAt: fetchedAt
+      updatedAt: fetchedAt,
+      entryPrice,
+      marginAsset: position.marginAsset
     };
   }
 

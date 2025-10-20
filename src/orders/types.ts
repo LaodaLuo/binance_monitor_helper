@@ -12,7 +12,15 @@ export type OrderStatus =
 
 export type OrderType = 'MARKET' | 'LIMIT' | 'STOP' | 'STOP_MARKET' | 'TAKE_PROFIT' | 'TAKE_PROFIT_MARKET' | string;
 
-export type OrderSource = '止盈' | '止损' | '其他';
+export type OrderSource = '止盈' | '止损' | '追踪止损' | '其他';
+
+export type OrderClassification = 'TP1' | 'TP2' | 'TP' | 'SL' | 'FT' | 'GENERAL';
+
+export interface OrderPresentation {
+  source: OrderSource;
+  classification: OrderClassification;
+  titleSuffix: string;
+}
 
 export interface RawOrderTradeUpdate {
   e: 'ORDER_TRADE_UPDATE';
@@ -68,6 +76,7 @@ export interface AggregationContext {
   orderType: OrderType;
   side: OrderSide;
   source: OrderSource;
+  presentation: OrderPresentation;
   originalQuantity: string;
   cumulativeQuantity: string;
   cumulativeQuote: string;
@@ -86,15 +95,20 @@ export interface OrderNotificationInput {
   symbol: string;
   side: OrderSide;
   source: OrderSource;
+  title: string;
   stateLabel: string;
-  size: string;
-  cumulativeQuantity?: string;
   displayPrice: string;
   priceSource: PriceSource;
   notifyTime: Date;
   orderType: OrderType;
   status: OrderStatus;
   rawEvents: OrderEvent[];
+  cumulativeQuote?: string;
+  cumulativeQuoteDisplay?: string;
+  cumulativeQuoteRatio?: string;
+  cumulativeQuoteRatioDisplay?: string;
+  tradePnl?: string;
+  tradePnlDisplay?: string;
 }
 
 export const Scenario = {
@@ -124,13 +138,62 @@ export const SLTP_WINDOW_SCENARIOS: ScenarioKey[] = [
 ];
 
 export function isStopLossOrTakeProfit(clientOrderId: string): boolean {
-  return clientOrderId.startsWith('SL') || clientOrderId.startsWith('TP');
+  const normalized = clientOrderId.toUpperCase();
+  return normalized.startsWith('SL') || normalized.startsWith('TP') || normalized.startsWith('FT');
+}
+
+export function resolveOrderPresentation(clientOrderId: string): OrderPresentation {
+  const normalized = clientOrderId.trim().toUpperCase();
+
+  if (normalized.startsWith('FT')) {
+    return {
+      source: '追踪止损',
+      classification: 'FT',
+      titleSuffix: '跟踪交易止损'
+    };
+  }
+
+  if (normalized.startsWith('TP1')) {
+    return {
+      source: '止盈',
+      classification: 'TP1',
+      titleSuffix: '反弹1/5减仓'
+    };
+  }
+
+  if (normalized.startsWith('TP2')) {
+    return {
+      source: '止盈',
+      classification: 'TP2',
+      titleSuffix: '反弹1/2清仓'
+    };
+  }
+
+  if (normalized.startsWith('TP')) {
+    return {
+      source: '止盈',
+      classification: 'TP',
+      titleSuffix: '止盈'
+    };
+  }
+
+  if (normalized.startsWith('SL')) {
+    return {
+      source: '止损',
+      classification: 'SL',
+      titleSuffix: '5%成本止损'
+    };
+  }
+
+  return {
+    source: '其他',
+    classification: 'GENERAL',
+    titleSuffix: '其他'
+  };
 }
 
 export function resolveOrderSource(clientOrderId: string): OrderSource {
-  if (clientOrderId.startsWith('TP')) return '止盈';
-  if (clientOrderId.startsWith('SL')) return '止损';
-  return '其他';
+  return resolveOrderPresentation(clientOrderId).source;
 }
 
 export function aggregationKey(event: OrderEvent): string {

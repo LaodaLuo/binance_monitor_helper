@@ -3,7 +3,7 @@ import {
   aggregationKey,
   type AggregationContext,
   type OrderEvent,
-  type OrderSource
+  type OrderPresentation
 } from './types.js';
 
 const ZERO = new Big(0);
@@ -20,7 +20,7 @@ function safeBig(value: string | undefined | null): Big {
 export class OrderStateTracker {
   private readonly store = new Map<string, AggregationContext>();
 
-  update(event: OrderEvent, source: OrderSource): AggregationContext {
+  update(event: OrderEvent, presentation: OrderPresentation): AggregationContext {
     const key = aggregationKey(event);
     const existing = this.store.get(key);
 
@@ -30,7 +30,8 @@ export class OrderStateTracker {
       clientOrderId: event.clientOrderId,
       orderType: event.orderType,
       side: event.side,
-      source,
+      source: presentation.source,
+      presentation,
       originalQuantity: event.originalQuantity,
       cumulativeQuantity: '0',
       cumulativeQuote: '0',
@@ -53,7 +54,8 @@ export class OrderStateTracker {
       ...baseContext,
       orderType: event.orderType,
       side: event.side,
-      source,
+      source: presentation.source,
+      presentation,
       cumulativeQuantity: event.cumulativeQuantity,
       cumulativeQuote: cumulativeQuote.toString(),
       lastAveragePrice: event.averagePrice,

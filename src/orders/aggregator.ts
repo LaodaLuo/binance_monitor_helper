@@ -1,11 +1,13 @@
 import Big from 'big.js';
 import { appConfig } from '../config/index.js';
 import { logger } from '../utils/logger.js';
+import { resolveQuoteAsset } from '../utils/symbol.js';
+import { BinanceAccountMetricsProvider, type AccountMetricsProvider } from './accountMetricsProvider.js';
 import { OrderStateTracker } from './stateTracker.js';
 import {
   Scenario,
   aggregationKey,
-  resolveOrderSource,
+  resolveOrderPresentation,
   type AggregationContext,
   type OrderEvent,
   type OrderNotificationInput,
@@ -16,15 +18,18 @@ export type NotificationHandler = (payload: OrderNotificationInput) => Promise<v
 
 interface AggregatorOptions {
   aggregationWindowMs?: number;
+  metricsProvider?: AccountMetricsProvider;
 }
 
 export class OrderAggregator {
   private readonly aggregationWindowMs: number;
   private readonly tracker = new OrderStateTracker();
+  private readonly metricsProvider: AccountMetricsProvider;
   private notificationHandler?: NotificationHandler;
 
   constructor(options: AggregatorOptions = {}) {
     this.aggregationWindowMs = options.aggregationWindowMs ?? appConfig.aggregationWindowMs;
+    this.metricsProvider = options.metricsProvider ?? new BinanceAccountMetricsProvider();
   }
 
   onNotify(handler: NotificationHandler): void {
@@ -36,24 +41,25 @@ export class OrderAggregator {
       throw new Error('Notification handler not registered');
     }
 
-    const source = resolveOrderSource(event.clientOrderId);
+    const presentation = resolveOrderPresentation(event.clientOrderId);
+    const source = presentation.source;
 
     if (source === '其他' && event.status === 'NEW') {
       logger.debug({ event }, 'Ignoring NEW status for general order');
       return;
     }
 
-    const context = this.tracker.update(event, source);
+    const context = this.tracker.update(event, presentation);
 
-    if (source === '止盈' || source === '止损') {
-      await this.handleSlTpOrder(event, context);
+    if (source === '止盈' || source === '止损' || source === '追踪止损') {
+      await this.handleStopLikeOrder(event, context);
       return;
     }
 
     await this.handleGeneralOrder(event, context);
   }
 
-  private async handleSlTpOrder(
+  private async handleStopLikeOrder(
     event: OrderEvent,
     context: AggregationContext
   ): Promise<void> {
@@ -203,8 +209,9 @@ export class OrderAggregator {
     if (!this.notificationHandler) return;
 
     const latestEvent = context.events[context.events.length - 1];
-    const cumulativeQty = new Big(context.cumulativeQuantity || '0');
-    const cumulativeQuote = new Big(context.cumulativeQuote || '0');
+    const cumulativeQty = this.safeBig(context.cumulativeQuantity) ?? new Big(0);
+    const cumulativeQuote = this.safeBig(context.cumulativeQuote) ?? new Big(0);
+    const quoteAsset = resolveQuoteAsset(latestEvent.symbol) || undefined;
 
     const stopPriceCandidate =
       (latestEvent.stopPrice && latestEvent.stopPrice !== '0' ? latestEvent.stopPrice : undefined) ||
@@ -233,26 +240,105 @@ export class OrderAggregator {
     }
 
     const priceSource = options.priceSource ?? (latestEvent.orderType === 'MARKET' ? 'average' : 'order');
+    const title = `${latestEvent.symbol}-${context.presentation.titleSuffix}`;
+
+    let cumulativeQuoteRaw: string | undefined;
+    let cumulativeQuoteDisplay: string | undefined;
+    let cumulativeQuoteRatioRaw: string | undefined;
+    let cumulativeQuoteRatioDisplay: string | undefined;
+    let tradePnlRaw: string | undefined;
+    let tradePnlDisplay: string | undefined;
+
+    const shouldProvideAggregates = options.includeCumulative && cumulativeQuote.gt(0);
+
+    if (shouldProvideAggregates) {
+      cumulativeQuoteRaw = cumulativeQuote.toFixed(8);
+      cumulativeQuoteDisplay = this.formatAmount(cumulativeQuote, quoteAsset);
+
+      try {
+        const summary = await this.metricsProvider.getSummary();
+        if (summary?.totalFunds && summary.totalFunds > 0) {
+          const ratioValue = cumulativeQuote.div(summary.totalFunds);
+          cumulativeQuoteRatioRaw = ratioValue.toFixed(6);
+          cumulativeQuoteRatioDisplay = this.formatPercent(ratioValue);
+        }
+      } catch (error) {
+        logger.warn({ error }, 'Failed to obtain account summary for ratio calculation');
+      }
+
+      const realizedPnl = this.sumRealizedPnl(context);
+      tradePnlRaw = realizedPnl.toFixed(8);
+      tradePnlDisplay = this.formatSignedAmount(realizedPnl, quoteAsset);
+    }
 
     const payload: OrderNotificationInput = {
       scenario,
       symbol: latestEvent.symbol,
       side: latestEvent.side,
       source: context.source,
+      title,
       stateLabel: options.stateLabel,
-      size: latestEvent.originalQuantity,
-      cumulativeQuantity: options.includeCumulative && cumulativeQty.gt(0)
-        ? cumulativeQty.toString()
-        : undefined,
       displayPrice,
       priceSource,
       notifyTime: new Date(),
       orderType: latestEvent.orderType,
       status: latestEvent.status,
-      rawEvents: [...context.events]
+      rawEvents: [...context.events],
+      cumulativeQuote: cumulativeQuoteRaw,
+      cumulativeQuoteDisplay,
+      cumulativeQuoteRatio: cumulativeQuoteRatioRaw,
+      cumulativeQuoteRatioDisplay,
+      tradePnl: tradePnlRaw,
+      tradePnlDisplay
     };
 
     await this.notificationHandler(payload);
+  }
+
+  private formatAmount(value: Big, asset?: string): string {
+    const abs = value.abs();
+    const decimals = abs.gte(1) || abs.eq(0) ? 2 : 4;
+    const formatted = value.toFixed(decimals);
+    return asset ? `${formatted} ${asset}` : formatted;
+  }
+
+  private formatSignedAmount(value: Big, asset?: string): string {
+    const abs = value.abs();
+    const decimals = abs.gte(1) || abs.eq(0) ? 2 : 4;
+    const formatted = abs.toFixed(decimals);
+    const prefix = value.gt(0) ? '+' : value.lt(0) ? '-' : '';
+    const suffix = asset ? ` ${asset}` : '';
+    return `${prefix}${formatted}${suffix}`;
+  }
+
+  private formatPercent(value: Big): string {
+    return `${value.times(100).toFixed(2)}%`;
+  }
+
+  private sumRealizedPnl(context: AggregationContext): Big {
+    return context.events.reduce((acc, evt) => {
+      const realized = evt.raw.o.rp;
+      if (!realized) {
+        return acc;
+      }
+      try {
+        return acc.plus(new Big(realized));
+      } catch (error) {
+        logger.debug({ error, realized }, 'Failed to parse realized PnL value');
+        return acc;
+      }
+    }, new Big(0));
+  }
+
+  private safeBig(value: string | number | null | undefined): Big | null {
+    if (value === undefined || value === null || value === '') {
+      return null;
+    }
+    try {
+      return new Big(value);
+    } catch {
+      return null;
+    }
   }
 
   private clearContext(event: OrderEvent): void {

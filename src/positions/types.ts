@@ -13,6 +13,8 @@ export interface PositionSnapshot {
   markPrice: number;
   predictedFundingRate: number | null;
   updatedAt: number;
+  entryPrice?: number;
+  marginAsset?: string;
 }
 
 export interface AccountContext {

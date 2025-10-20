@@ -9,15 +9,18 @@ describe('buildFeishuCard', () => {
       symbol: 'BTCUSDT',
       side: 'BUY',
       source: '其他',
+      title: 'BTCUSDT-其他',
       stateLabel: '成交',
-      size: '1',
-      cumulativeQuantity: '1',
       displayPrice: '45000',
       priceSource: 'average',
       notifyTime: new Date('2024-01-01T00:00:00Z'),
       orderType: 'LIMIT',
       status: 'FILLED',
-      rawEvents: []
+      rawEvents: [],
+      cumulativeQuote: '45000.00000000',
+      cumulativeQuoteDisplay: '45000.00 USDT',
+      cumulativeQuoteRatioDisplay: '45.00%',
+      tradePnlDisplay: '+5.00 USDT'
     });
 
     expect(payload.msg_type).toBe('interactive');
@@ -27,8 +30,12 @@ describe('buildFeishuCard', () => {
     const directionField = card.elements[1].fields[0].text.content;
     expect(directionField).toContain('方向');
     expect(directionField).toContain('买入');
-    const sizeField = card.elements[2].fields[0].text.content;
-    expect(sizeField).toContain('Size');
+    const amountField = card.elements[1].fields[1].text.content;
+    expect(amountField).toContain('累计成交金额');
+    expect(amountField).toContain('45000.00 USDT');
+    const pnlField = card.elements[2].fields[1].text.content;
+    expect(pnlField).toContain('该笔交易累计PnL');
+    expect(pnlField).toContain('+5.00 USDT');
     const priceText = card.elements[3].text.content;
     expect(priceText).toContain('平均成交价格');
   });
@@ -39,8 +46,8 @@ describe('buildFeishuCard', () => {
       symbol: 'ETHUSDT',
       side: 'BUY',
       source: '止损',
+      title: 'ETHUSDT-5%成本止损',
       stateLabel: '创建',
-      size: '2',
       displayPrice: '2300',
       priceSource: 'order',
       notifyTime: new Date('2024-01-01T00:00:00Z'),
@@ -50,10 +57,16 @@ describe('buildFeishuCard', () => {
     });
 
     const card = payload.card as any;
-    expect(card.header.title.content).toBe('ETHUSDT-止损');
+    expect(card.header.title.content).toBe('ETHUSDT-5%成本止损');
     const directionField = card.elements[1].fields[0].text.content;
     expect(directionField).toContain('方向');
     expect(directionField).toContain('买入');
+    const amountField = card.elements[1].fields[1].text.content;
+    expect(amountField).toContain('累计成交金额');
+    expect(amountField).toContain('-');
+    const ratioField = card.elements[2].fields[0].text.content;
+    expect(ratioField).toContain('累计成交金额占比');
+    expect(ratioField).toContain('-');
     const priceText = card.elements[3].text.content;
     expect(priceText).toContain('价格');
     expect(priceText).not.toContain('平均');

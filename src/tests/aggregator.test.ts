@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { AccountMetricsProvider, AccountSummary } from '../orders/accountMetricsProvider.js';
 
 type AggregatorModule = typeof import('../orders/aggregator.js');
 type TypesModule = typeof import('../orders/types.js');
@@ -7,6 +8,9 @@ type EventMapperModule = typeof import('../orders/eventMapper.js');
 let OrderAggregator: AggregatorModule['OrderAggregator'];
 let Scenario: TypesModule['Scenario'];
 let toOrderEvent: EventMapperModule['toOrderEvent'];
+let metricsProvider: AccountMetricsProvider;
+let metricsSummary: AccountSummary;
+let getSummaryMock: ReturnType<typeof vi.fn>;
 
 const BASE_EVENT = {
   e: 'ORDER_TRADE_UPDATE' as const,
@@ -27,6 +31,7 @@ const BASE_EVENT = {
     L: '45000',
     p: '0',
     sp: '45000',
+    rp: '0',
     m: false,
     T: Date.now()
   }
@@ -77,7 +82,17 @@ describe('OrderAggregator', () => {
 
   beforeEach(() => {
     notifications = [];
-    aggregator = new OrderAggregator({ aggregationWindowMs: 1000 });
+    metricsSummary = {
+      totalFunds: 100000,
+      fetchedAt: Date.now(),
+      positions: new Map()
+    };
+    getSummaryMock = vi.fn().mockResolvedValue(metricsSummary);
+    metricsProvider = {
+      getSummary: getSummaryMock
+    };
+
+    aggregator = new OrderAggregator({ aggregationWindowMs: 1000, metricsProvider });
     aggregator.onNotify((notification) => {
       notifications.push(notification);
     });
@@ -92,9 +107,14 @@ describe('OrderAggregator', () => {
     expect(notifications[0].side).toBe('BUY');
     expect(notifications[0].source).toBe('其他');
     expect(notifications[0].stateLabel).toBe('成交');
-    expect(notifications[0].cumulativeQuantity).toBe('1');
+    expect(notifications[0].title).toBe('BTCUSDT-其他');
     expect(notifications[0].priceSource).toBe('average');
     expect(notifications[0].displayPrice).toBe('45000.00000000');
+    expect(notifications[0].cumulativeQuote).toBe('45000.00000000');
+    expect(notifications[0].cumulativeQuoteDisplay).toBe('45000.00 USDT');
+    expect(notifications[0].cumulativeQuoteRatioDisplay).toBe('45.00%');
+    expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
   it('handles 普通订单分批成交且 10 秒内全部完成', async () => {
@@ -107,9 +127,44 @@ describe('OrderAggregator', () => {
     expect(notifications).toHaveLength(1);
     expect(notifications[0].scenario).toBe(Scenario.GENERAL_AGGREGATED);
     expect(notifications[0].source).toBe('其他');
-    expect(notifications[0].cumulativeQuantity).toBe('1');
+    expect(notifications[0].title).toBe('BTCUSDT-其他');
     expect(notifications[0].priceSource).toBe('average');
     expect(notifications[0].displayPrice).toBe('45000.00000000');
+    expect(notifications[0].cumulativeQuoteDisplay).toBe('45000.00 USDT');
+    expect(notifications[0].cumulativeQuoteRatioDisplay).toBe('45.00%');
+    expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('aggregates 实现盈亏 rp 字段', async () => {
+    const partial = buildEvent({
+      o: 'LIMIT',
+      X: 'PARTIALLY_FILLED',
+      z: '0.5',
+      l: '0.5',
+      c: 'ORD-PNL',
+      p: '45000',
+      sp: undefined,
+      rp: '2.5'
+    });
+    const filled = buildEvent({
+      o: 'LIMIT',
+      X: 'FILLED',
+      z: '1',
+      l: '0.5',
+      c: 'ORD-PNL',
+      p: '45000',
+      sp: undefined,
+      rp: '1.5'
+    });
+
+    await aggregator.handleEvent(partial);
+    await aggregator.handleEvent(filled);
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].tradePnl).toBe('4.00000000');
+    expect(notifications[0].tradePnlDisplay).toBe('+4.00 USDT');
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
   it('handles 普通订单分批成交但 10 秒内无新增成交', async () => {
@@ -123,9 +178,12 @@ describe('OrderAggregator', () => {
     expect(notifications[0].scenario).toBe(Scenario.GENERAL_TIMEOUT);
     expect(notifications[0].stateLabel).toBe('部分成交');
     expect(notifications[0].source).toBe('其他');
-    expect(notifications[0].cumulativeQuantity).toBe('0.3');
+    expect(notifications[0].cumulativeQuoteDisplay).toBe('13500.00 USDT');
+    expect(notifications[0].cumulativeQuoteRatioDisplay).toBe('13.50%');
+    expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
     expect(notifications[0].priceSource).toBe('average');
     expect(notifications[0].displayPrice).toBe('45000.00000000');
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
   it('handles SL/TP 创建', async () => {
@@ -145,9 +203,13 @@ describe('OrderAggregator', () => {
     expect(notifications[0].scenario).toBe(Scenario.SLTP_NEW);
     expect(notifications[0].source).toBe('止损');
     expect(notifications[0].stateLabel).toBe('创建');
-    expect(notifications[0].cumulativeQuantity).toBeUndefined();
+    expect(notifications[0].title).toBe('BTCUSDT-5%成本止损');
+    expect(notifications[0].cumulativeQuote).toBeUndefined();
+    expect(notifications[0].cumulativeQuoteDisplay).toBeUndefined();
+    expect(notifications[0].tradePnlDisplay).toBeUndefined();
     expect(notifications[0].priceSource).toBe('order');
     expect(notifications[0].displayPrice).toBe('43000');
+    expect(getSummaryMock).not.toHaveBeenCalled();
   });
 
   it('handles SL/TP 取消', async () => {
@@ -166,9 +228,12 @@ describe('OrderAggregator', () => {
     expect(notifications[0].scenario).toBe(Scenario.SLTP_CANCELED);
     expect(notifications[0].source).toBe('止损');
     expect(notifications[0].stateLabel).toBe('取消');
-    expect(notifications[0].cumulativeQuantity).toBeUndefined();
+    expect(notifications[0].title).toBe('BTCUSDT-5%成本止损');
+    expect(notifications[0].cumulativeQuote).toBeUndefined();
+    expect(notifications[0].tradePnlDisplay).toBeUndefined();
     expect(notifications[0].priceSource).toBe('order');
     expect(notifications[0].displayPrice).toBe('43500');
+    expect(getSummaryMock).not.toHaveBeenCalled();
   });
 
   it('handles SL/TP 完全成交', async () => {
@@ -179,8 +244,33 @@ describe('OrderAggregator', () => {
     expect(notifications[0].scenario).toBe(Scenario.SLTP_FILLED);
     expect(notifications[0].source).toBe('止盈');
     expect(notifications[0].stateLabel).toBe('成交');
-    expect(notifications[0].cumulativeQuantity).toBe('1');
+    expect(notifications[0].title).toBe('BTCUSDT-止盈');
+    expect(notifications[0].cumulativeQuoteDisplay).toBe('45000.00 USDT');
+    expect(notifications[0].cumulativeQuoteRatioDisplay).toBe('45.00%');
+    expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
     expect(notifications[0].priceSource).toBe('average');
+    expect(notifications[0].displayPrice).toBe('45000.00000000');
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies TP1 专属标题', async () => {
+    const event = buildEvent({ o: 'STOP_MARKET', X: 'FILLED', z: '1', l: '1', c: 'TP1-001' });
+    await aggregator.handleEvent(event);
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].source).toBe('止盈');
+    expect(notifications[0].title).toBe('BTCUSDT-反弹1/5减仓');
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('applies FT 标题及来源', async () => {
+    const event = buildEvent({ o: 'STOP_MARKET', X: 'FILLED', z: '1', l: '1', c: 'FT-001' });
+    await aggregator.handleEvent(event);
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].source).toBe('追踪止损');
+    expect(notifications[0].title).toBe('BTCUSDT-跟踪交易止损');
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
   it('handles SL/TP 部分成交且 10 秒内完成', async () => {
@@ -194,7 +284,10 @@ describe('OrderAggregator', () => {
     expect(notifications[0].scenario).toBe(Scenario.SLTP_PARTIAL_COMPLETED);
     expect(notifications[0].source).toBe('止盈');
     expect(notifications[0].stateLabel).toBe('成交');
-    expect(notifications[0].cumulativeQuantity).toBe('1');
+    expect(notifications[0].title).toBe('BTCUSDT-止盈');
+    expect(notifications[0].cumulativeQuoteDisplay).toBe('45000.00 USDT');
+    expect(notifications[0].cumulativeQuoteRatioDisplay).toBe('45.00%');
+    expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
     expect(notifications[0].priceSource).toBe('average');
   });
 
@@ -209,8 +302,12 @@ describe('OrderAggregator', () => {
     expect(notifications[0].scenario).toBe(Scenario.SLTP_PARTIAL_TIMEOUT);
     expect(notifications[0].source).toBe('止盈');
     expect(notifications[0].stateLabel).toBe('部分成交');
-    expect(notifications[0].cumulativeQuantity).toBe('0.4');
+    expect(notifications[0].title).toBe('BTCUSDT-止盈');
+    expect(notifications[0].cumulativeQuoteDisplay).toBe('18000.00 USDT');
+    expect(notifications[0].cumulativeQuoteRatioDisplay).toBe('18.00%');
+    expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
     expect(notifications[0].priceSource).toBe('average');
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
   it('handles SL/TP 部分成交后取消', async () => {
@@ -224,8 +321,12 @@ describe('OrderAggregator', () => {
     expect(notifications[0].scenario).toBe(Scenario.SLTP_PARTIAL_CANCELED);
     expect(notifications[0].source).toBe('止盈');
     expect(notifications[0].stateLabel).toBe('取消');
-    expect(notifications[0].cumulativeQuantity).toBe('0.5');
+    expect(notifications[0].title).toBe('BTCUSDT-止盈');
+    expect(notifications[0].cumulativeQuoteDisplay).toBe('22500.00 USDT');
+    expect(notifications[0].cumulativeQuoteRatioDisplay).toBe('22.50%');
+    expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
     expect(notifications[0].priceSource).toBe('average');
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
   it('ignores 非 SL/TP 的 NEW 状态', async () => {
@@ -233,6 +334,7 @@ describe('OrderAggregator', () => {
     await aggregator.handleEvent(event);
 
     expect(notifications).toHaveLength(0);
+    expect(getSummaryMock).not.toHaveBeenCalled();
   });
 
   it('handles 普通订单部分成交后取消', async () => {
@@ -246,14 +348,19 @@ describe('OrderAggregator', () => {
     expect(notifications[0].scenario).toBe(Scenario.GENERAL_PARTIAL_CANCELED);
     expect(notifications[0].source).toBe('其他');
     expect(notifications[0].stateLabel).toBe('取消');
-    expect(notifications[0].cumulativeQuantity).toBe('0.2');
+    expect(notifications[0].title).toBe('BTCUSDT-其他');
+    expect(notifications[0].cumulativeQuoteDisplay).toBe('9000.00 USDT');
+    expect(notifications[0].cumulativeQuoteRatioDisplay).toBe('9.00%');
+    expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
     expect(notifications[0].priceSource).toBe('average');
     expect(notifications[0].displayPrice).toBe('45000.00000000');
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
   it('ignores SL/TP 触发生成的执行单创建', async () => {
     const triggerNew = buildEvent({ o: 'MARKET', X: 'NEW', x: 'NEW', l: '0', z: '0', c: 'TP-TRIG', sp: undefined, p: '0' });
     await aggregator.handleEvent(triggerNew);
     expect(notifications).toHaveLength(0);
+    expect(getSummaryMock).not.toHaveBeenCalled();
   });
 });
