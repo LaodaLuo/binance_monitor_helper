@@ -58,6 +58,7 @@ function registerStreamHandlers(): void {
     const raw = parseRawOrderTradeUpdate(payload);
     if (!raw) return;
     const event = toOrderEvent(raw);
+    logger.debug({event}, 'Event emit');
     aggregator
       .handleEvent(event)
       .catch((error) => logger.error({ error }, 'Failed to process order event'));
