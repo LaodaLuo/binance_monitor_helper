@@ -27,6 +27,7 @@ interface PositionRiskResponse {
 interface PremiumIndexResponse {
   symbol: string;
   predictedFundingRate?: string;
+  lastFundingRate?: string;
 }
 
 interface BinanceAccountFetcherOptions {
@@ -62,6 +63,26 @@ function deriveBaseAsset(symbol: string, marginAsset: string): string {
     return normalizeBaseAssetId(symbol.slice(0, symbol.length - normalizedMargin.length));
   }
   return normalizeBaseAssetId(symbol);
+}
+
+export function parseFundingRate(item: PremiumIndexResponse): number | null {
+  const predicted = item.predictedFundingRate;
+  if (predicted !== undefined && predicted !== null && predicted !== '') {
+    const predictedValue = Number(predicted);
+    if (Number.isFinite(predictedValue)) {
+      return predictedValue;
+    }
+  }
+
+  const fallback = item.lastFundingRate;
+  if (fallback !== undefined && fallback !== null && fallback !== '') {
+    const fallbackValue = Number(fallback);
+    if (Number.isFinite(fallbackValue)) {
+      return fallbackValue;
+    }
+  }
+
+  return null;
 }
 
 export class BinanceAccountFetcher {
@@ -159,7 +180,7 @@ export class BinanceAccountFetcher {
     ]);
 
     const predictedFundingMap = new Map<string, number | null>(
-      premiumIndex.map((item) => [item.symbol, item.predictedFundingRate ? Number(item.predictedFundingRate) : null])
+      premiumIndex.map((item) => [item.symbol, parseFundingRate(item)])
     );
 
     const snapshots: PositionSnapshot[] = [];
