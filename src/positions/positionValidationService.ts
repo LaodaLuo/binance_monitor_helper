@@ -22,7 +22,7 @@ const RULE_LABEL_MAP: Record<ValidationIssue['rule'], string> = {
   blacklist_violation: '黑名单限制',
   config_error: '配置异常',
   leverage_limit: '杠杆限制',
-  margin_share_limit: '保证金占比',
+  margin_share_limit: '单币保证金占比',
   total_margin_usage: '总保证金使用率',
   funding_rate_limit: '资金费率',
   data_missing: '数据异常'
