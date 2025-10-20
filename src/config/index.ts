@@ -38,7 +38,12 @@ const configSchema = z.object({
     .string()
     .transform((val) => Number(val))
     .or(z.number())
-    .default(3)
+    .default(3),
+  POSITION_VALIDATION_INTERVAL_MS: z
+    .string()
+    .transform((val) => Number(val))
+    .or(z.number())
+    .default(30_000)
 });
 
 type ConfigSchema = z.infer<typeof configSchema>;
@@ -63,6 +68,7 @@ export interface AppConfig {
   listenKeyKeepAliveMs: number;
   logLevel: string;
   maxRetry: number;
+  positionValidationIntervalMs: number;
 }
 
 export const appConfig: AppConfig = {
@@ -75,5 +81,6 @@ export const appConfig: AppConfig = {
   aggregationWindowMs: Number(rawConfig.AGGREGATION_WINDOW_MS) || 10000,
   listenKeyKeepAliveMs: Number(rawConfig.LISTEN_KEY_KEEP_ALIVE_MS) || 25 * 60 * 1000,
   logLevel: rawConfig.LOG_LEVEL,
-  maxRetry: Number(rawConfig.MAX_RETRY) || 3
+  maxRetry: Number(rawConfig.MAX_RETRY) || 3,
+  positionValidationIntervalMs: Number(rawConfig.POSITION_VALIDATION_INTERVAL_MS) || 30_000
 };

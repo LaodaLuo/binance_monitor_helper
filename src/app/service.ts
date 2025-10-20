@@ -7,6 +7,7 @@ import { FeishuNotifier } from '../notifications/notifier.js';
 import { OrderAggregator } from '../orders/aggregator.js';
 import { parseRawOrderTradeUpdate, toOrderEvent } from '../orders/eventMapper.js';
 import { logger } from '../utils/logger.js';
+import { PositionValidationService } from '../positions/positionValidationService.js';
 
 const listenKeyClient = ListenKeyClient.createDefault();
 const streamClient = new StreamClient();
@@ -15,9 +16,11 @@ const notifier = new FeishuNotifier();
 const secondaryNotifier = new FeishuNotifier({
   webhookUrl: appConfig.feishuSecondaryWebhookUrl
 });
+const positionValidationService = new PositionValidationService();
 
 let listenKey: string;
 let keepAliveTimer: NodeJS.Timeout | undefined;
+let positionValidationTimer: NodeJS.Timeout | undefined;
 
 const shouldSendToSecondary = (stateLabel: string): boolean =>
   stateLabel.includes('创建') || stateLabel.includes('取消');
@@ -93,6 +96,7 @@ async function start(): Promise<void> {
     registerStreamHandlers();
     streamClient.connect(listenKey);
     await refreshListenKeyPeriodically();
+    schedulePositionValidation();
     logger.info('Binance order monitoring service started');
   } catch (error) {
     logger.error({ error }, 'Failed to start monitoring service');
@@ -100,11 +104,32 @@ async function start(): Promise<void> {
   }
 }
 
+function schedulePositionValidation(): void {
+  const interval = positionValidationService.getIntervalMs();
+
+  const execute = async () => {
+    try {
+      await positionValidationService.run();
+    } catch (error) {
+      logger.error({ error }, 'Position validation execution error');
+    }
+  };
+
+  execute().catch((error) => logger.error({ error }, 'Initial position validation failed'));
+
+  positionValidationTimer = setInterval(() => {
+    void execute();
+  }, interval);
+}
+
 function setupGracefulShutdown(): void {
   const shutdown = async (signal: NodeJS.Signals) => {
     logger.info({ signal }, 'Shutting down service');
     if (keepAliveTimer) {
       clearInterval(keepAliveTimer);
+    }
+    if (positionValidationTimer) {
+      clearInterval(positionValidationTimer);
     }
     streamClient.close();
     if (listenKey) {

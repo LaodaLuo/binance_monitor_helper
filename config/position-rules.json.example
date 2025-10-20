@@ -1,0 +1,31 @@
+{
+  "defaults": {
+    "maxLeverage": 3,
+    "maxMarginShare": 0.05,
+    "fundingThresholdShort": -0.002,
+    "fundingThresholdLong": null,
+    "cooldownMinutes": 60,
+    "notifyRecovery": false,
+    "minFundingRateDelta": 0,
+    "totalMarginUsageLimit": 1,
+    "requireLongAssets": ["BTC"],
+    "requireShortAssets": [],
+    "forbidLongAssets": [],
+    "forbidShortAssets": ["BTC"]
+  },
+  "overrides": {
+    "BTC": {
+      "maxLeverage": 10,
+      "maxMarginShare": 0.5,
+      "fundingThresholdShort": -0.001,
+      "notifyRecovery": true
+    },
+    "ETH": {
+      "requireLong": false,
+      "requireShort": true,
+      "cooldownMinutes": 15,
+      "maxMarginShare": 0.02,
+      "fundingThresholdShort": -0.0005
+    }
+  }
+}
