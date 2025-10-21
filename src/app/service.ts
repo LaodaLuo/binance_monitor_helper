@@ -22,13 +22,13 @@ let listenKey: string;
 let keepAliveTimer: NodeJS.Timeout | undefined;
 let positionValidationTimer: NodeJS.Timeout | undefined;
 
-const shouldSendToSecondary = (stateLabel: string): boolean =>
-  stateLabel.includes('创建') || stateLabel.includes('取消');
+const shouldSendToPrimary = (stateLabel: string): boolean => stateLabel.includes('成交');
 
 aggregator.onNotify(async (notification) => {
   const card = buildFeishuCard(notification);
-  await notifier.send(card);
-  if (shouldSendToSecondary(notification.stateLabel)) {
+  if (shouldSendToPrimary(notification.stateLabel)) {
+    await notifier.send(card);
+  } else {
     await secondaryNotifier.send(card);
   }
 });
