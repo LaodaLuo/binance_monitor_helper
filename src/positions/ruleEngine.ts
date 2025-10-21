@@ -1,5 +1,5 @@
 import { getConfiguredAssets, getTotalMarginUsageLimit, positionRulesConfig, resolvePositionRule } from '../config/positionRules.js';
-import type { AccountContext, GroupedPositions, PositionSnapshot, ValidationIssue } from './types.js';
+import type { AccountContext, GroupedPositions, PositionSnapshot, SymbolMetrics, ValidationIssue } from './types.js';
 
 function groupPositionsByAsset(snapshots: PositionSnapshot[]): Map<string, GroupedPositions> {
   const grouped = new Map<string, GroupedPositions>();
@@ -21,14 +21,29 @@ function aggregateInitialMargin(positions: PositionSnapshot[]): number {
   return positions.reduce((sum, position) => sum + Math.abs(position.initialMargin), 0);
 }
 
+function groupPositionsBySymbol(snapshots: PositionSnapshot[]): Map<string, PositionSnapshot[]> {
+  const grouped = new Map<string, PositionSnapshot[]>();
+  for (const snapshot of snapshots) {
+    const current = grouped.get(snapshot.symbol) ?? [];
+    current.push(snapshot);
+    grouped.set(snapshot.symbol, current);
+  }
+  return grouped;
+}
+
+function aggregatePositionAmount(positions: PositionSnapshot[]): number {
+  return positions.reduce((sum, position) => sum + Math.abs(position.positionAmt), 0);
+}
+
 function aggregateNotional(positions: PositionSnapshot[]): number {
   return positions.reduce((sum, position) => sum + Math.abs(position.notional), 0);
 }
 
 export class PositionRuleEngine {
-  evaluate(context: AccountContext): ValidationIssue[] {
+  evaluate(context: AccountContext, symbolMetrics?: Map<string, SymbolMetrics>): ValidationIssue[] {
     const issues: ValidationIssue[] = [];
     const grouped = groupPositionsByAsset(context.snapshots);
+    const groupedBySymbol = groupPositionsBySymbol(context.snapshots);
     const candidateAssets = new Set<string>([...getConfiguredAssets(), ...grouped.keys()]);
 
     const totalMarginBalance = context.totalMarginBalance;
@@ -298,7 +313,137 @@ export class PositionRuleEngine {
       }
     }
 
+    this.evaluateSymbolMetrics(issues, groupedBySymbol, symbolMetrics);
+
     return issues;
+  }
+
+  private evaluateSymbolMetrics(
+    issues: ValidationIssue[],
+    groupedBySymbol: Map<string, PositionSnapshot[]>,
+    symbolMetrics: Map<string, SymbolMetrics> | undefined
+  ): void {
+    const shareThreshold = 0.02;
+    const minOpenInterest = 2_000_000;
+    const minMarketCap = 50_000_000;
+    const minVolume24h = 1_000_000;
+
+    for (const [symbol, positions] of groupedBySymbol.entries()) {
+      if (positions.length === 0) continue;
+      const metrics = symbolMetrics?.get(symbol);
+      const baseRule = resolvePositionRule(positions[0]?.baseAsset ?? symbol);
+      const cooldownMinutes = baseRule.cooldownMinutes;
+      const notifyRecovery = baseRule.notifyRecovery;
+      const missingFields = new Set<string>();
+
+      const openInterest = metrics?.openInterest ?? null;
+      if (openInterest !== null && openInterest > 0) {
+        const totalAmount = aggregatePositionAmount(positions);
+        const share = totalAmount / openInterest;
+        if (share > shareThreshold) {
+          issues.push({
+            rule: 'oi_share_limit',
+            baseAsset: symbol,
+            direction: 'global',
+            severity: 'critical',
+            message: `${symbol} 持仓总量占 OI ${(share * 100).toFixed(2)}%，超过阈值 ${(shareThreshold * 100).toFixed(
+              2
+            )}%`,
+            cooldownMinutes,
+            notifyOnRecovery: notifyRecovery,
+            value: share,
+            threshold: shareThreshold,
+            details: {
+              symbol,
+              openInterest,
+              positionAmount: totalAmount
+            }
+          });
+        }
+
+        if (openInterest < minOpenInterest) {
+          issues.push({
+            rule: 'oi_minimum',
+            baseAsset: symbol,
+            direction: 'global',
+            severity: 'warning',
+            message: `${symbol} 当前 OI ${openInterest.toLocaleString()} 低于阈值 ${minOpenInterest.toLocaleString()}`,
+            cooldownMinutes,
+            notifyOnRecovery: notifyRecovery,
+            value: openInterest,
+            threshold: minOpenInterest,
+            details: {
+              symbol,
+              openInterest
+            }
+          });
+        }
+      } else {
+        missingFields.add('OI');
+      }
+
+      const marketCap = metrics?.marketCap ?? null;
+      if (marketCap !== null) {
+        if (marketCap < minMarketCap) {
+          issues.push({
+            rule: 'market_cap_minimum',
+            baseAsset: symbol,
+            direction: 'global',
+            severity: 'warning',
+            message: `${symbol} 市值 ${marketCap.toLocaleString()} 低于阈值 ${minMarketCap.toLocaleString()}`,
+            cooldownMinutes,
+            notifyOnRecovery: notifyRecovery,
+            value: marketCap,
+            threshold: minMarketCap,
+            details: {
+              symbol,
+              marketCap
+            }
+          });
+        }
+      } else {
+        missingFields.add('市值');
+      }
+
+      const volume24h = metrics?.volume24h ?? null;
+      if (volume24h !== null) {
+        if (volume24h < minVolume24h) {
+          issues.push({
+            rule: 'volume_24h_minimum',
+            baseAsset: symbol,
+            direction: 'global',
+            severity: 'warning',
+            message: `${symbol} 24小时成交量 ${volume24h.toLocaleString()} 低于阈值 ${minVolume24h.toLocaleString()}`,
+            cooldownMinutes,
+            notifyOnRecovery: notifyRecovery,
+            value: volume24h,
+            threshold: minVolume24h,
+            details: {
+              symbol,
+              volume24h
+            }
+          });
+        }
+      } else {
+        missingFields.add('24小时成交量');
+      }
+
+      if (missingFields.size > 0) {
+        issues.push({
+          rule: 'data_missing',
+          baseAsset: symbol,
+          direction: 'global',
+          severity: 'warning',
+          message: `${symbol} 缺少数据：${Array.from(missingFields).join('、')}，无法完成全部检测`,
+          cooldownMinutes,
+          notifyOnRecovery: notifyRecovery,
+          details: {
+            symbol,
+            missingFields: Array.from(missingFields)
+          }
+        });
+      }
+    }
   }
 }
 

@@ -33,7 +33,11 @@ export type ValidationRuleType =
   | 'margin_share_limit'
   | 'total_margin_usage'
   | 'funding_rate_limit'
-  | 'data_missing';
+  | 'data_missing'
+  | 'oi_share_limit'
+  | 'oi_minimum'
+  | 'market_cap_minimum'
+  | 'volume_24h_minimum';
 
 export type ValidationSeverity = 'warning' | 'critical';
 
@@ -69,4 +73,13 @@ export interface AlertState {
 export interface GroupedPositions {
   long: PositionSnapshot[];
   short: PositionSnapshot[];
+}
+
+export interface SymbolMetrics {
+  symbol: string;
+  baseAsset: string;
+  openInterest: number | null;
+  marketCap: number | null;
+  volume24h: number | null;
+  fetchedAt: number;
 }

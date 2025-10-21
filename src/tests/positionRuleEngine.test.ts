@@ -83,6 +83,7 @@ vi.mock('../config/positionRules.js', () => {
 });
 
 import { PositionRuleEngine } from '../positions/ruleEngine.js';
+import type { SymbolMetrics } from '../positions/types.js';
 
 const engine = new PositionRuleEngine();
 
@@ -101,8 +102,8 @@ describe('PositionRuleEngine', () => {
           leverage: 2,
           initialMargin: 10,
           isolatedMargin: 0,
-          marginType: 'cross',
-          direction: 'long',
+          marginType: 'cross' as const,
+          direction: 'long' as const,
           markPrice: 100,
           predictedFundingRate: -0.001,
           updatedAt: now
@@ -131,8 +132,8 @@ describe('PositionRuleEngine', () => {
           leverage: 5,
           initialMargin: 10,
           isolatedMargin: 0,
-          marginType: 'cross',
-          direction: 'long',
+          marginType: 'cross' as const,
+          direction: 'long' as const,
           markPrice: 100,
           predictedFundingRate: -0.001,
           updatedAt: now
@@ -145,6 +146,143 @@ describe('PositionRuleEngine', () => {
     expect(leverageIssue).toBeDefined();
     const marginShareIssue = issues.find((issue) => issue.rule === 'margin_share_limit');
     expect(marginShareIssue).toBeDefined();
+  });
+
+  it('evaluates open interest related limits with provided metrics', () => {
+    const context = {
+      totalInitialMargin: 0,
+      totalMarginBalance: 1_000_000,
+      availableBalance: 900_000,
+      snapshots: [
+        {
+          baseAsset: 'BTC',
+          symbol: 'BTCUSDT',
+          positionAmt: 50,
+          notional: 100_000,
+          leverage: 1,
+          initialMargin: 1_000,
+          isolatedMargin: 0,
+          marginType: 'cross' as const,
+          direction: 'long' as const,
+          markPrice: 2_000,
+          predictedFundingRate: -0.001,
+          updatedAt: now
+        }
+      ],
+      fetchedAt: now
+    };
+
+    const metrics = new Map<string, SymbolMetrics>([
+      [
+        'BTCUSDT',
+        {
+          symbol: 'BTCUSDT',
+          baseAsset: 'BTC',
+          openInterest: 500, // share = 50 / 500 = 0.1 > 0.02
+          marketCap: 100_000_000,
+          volume24h: 10_000_000,
+          fetchedAt: now
+        }
+      ]
+    ]);
+
+    const issues = engine.evaluate(context, metrics);
+    const shareIssue = issues.find((issue) => issue.rule === 'oi_share_limit' && issue.baseAsset === 'BTCUSDT');
+    expect(shareIssue).toBeDefined();
+    expect(shareIssue?.threshold).toBeCloseTo(0.02);
+    expect(shareIssue?.value).toBeCloseTo(0.1);
+    const oiMinimumIssue = issues.find((issue) => issue.rule === 'oi_minimum' && issue.baseAsset === 'BTCUSDT');
+    expect(oiMinimumIssue).toBeDefined();
+  });
+
+  it('evaluates market cap and volume limits via metrics', () => {
+    const context = {
+      totalInitialMargin: 0,
+      totalMarginBalance: 1_000_000,
+      availableBalance: 800_000,
+      snapshots: [
+        {
+          baseAsset: 'BTC',
+          symbol: 'BTCUSDT',
+          positionAmt: 10,
+          notional: 200_000,
+          leverage: 1,
+          initialMargin: 500,
+          isolatedMargin: 0,
+          marginType: 'cross' as const,
+          direction: 'long' as const,
+          markPrice: 20_000,
+          predictedFundingRate: -0.001,
+          updatedAt: now
+        }
+      ],
+      fetchedAt: now
+    };
+
+    const metrics = new Map<string, SymbolMetrics>([
+      [
+        'BTCUSDT',
+        {
+          symbol: 'BTCUSDT',
+          baseAsset: 'BTC',
+          openInterest: 5_000_000,
+          marketCap: 10_000_000, // below 50m
+          volume24h: 500_000, // below 1m
+          fetchedAt: now
+        }
+      ]
+    ]);
+
+    const issues = engine.evaluate(context, metrics);
+    const marketCapIssue = issues.find((issue) => issue.rule === 'market_cap_minimum' && issue.baseAsset === 'BTCUSDT');
+    expect(marketCapIssue).toBeDefined();
+    expect(marketCapIssue?.threshold).toBe(50_000_000);
+    const volumeIssue = issues.find((issue) => issue.rule === 'volume_24h_minimum' && issue.baseAsset === 'BTCUSDT');
+    expect(volumeIssue).toBeDefined();
+  });
+
+  it('reports missing data when metrics are unavailable', () => {
+    const context = {
+      totalInitialMargin: 0,
+      totalMarginBalance: 1_000_000,
+      availableBalance: 900_000,
+      snapshots: [
+        {
+          baseAsset: 'BTC',
+          symbol: 'BTCUSDT',
+          positionAmt: 5,
+          notional: 100_000,
+          leverage: 1,
+          initialMargin: 500,
+          isolatedMargin: 0,
+          marginType: 'cross' as const,
+          direction: 'long' as const,
+          markPrice: 20_000,
+          predictedFundingRate: -0.001,
+          updatedAt: now
+        }
+      ],
+      fetchedAt: now
+    };
+
+    const metrics = new Map<string, SymbolMetrics>([
+      [
+        'BTCUSDT',
+        {
+          symbol: 'BTCUSDT',
+          baseAsset: 'BTC',
+          openInterest: null,
+          marketCap: null,
+          volume24h: null,
+          fetchedAt: now
+        }
+      ]
+    ]);
+
+    const issues = engine.evaluate(context, metrics);
+    const dataMissingIssue = issues.find((issue) => issue.rule === 'data_missing' && issue.baseAsset === 'BTCUSDT');
+    expect(dataMissingIssue).toBeDefined();
+    expect(Array.isArray(dataMissingIssue?.details?.missingFields)).toBe(true);
   });
 
   it('flags blacklist violation for prohibited short positions', () => {

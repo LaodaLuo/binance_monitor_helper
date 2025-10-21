@@ -6,6 +6,7 @@ import type { AlertEvent, ValidationIssue } from './types.js';
 import { buildPositionAlertCard } from '../notifications/positionCardBuilder.js';
 import { FeishuNotifier } from '../notifications/notifier.js';
 import { logger } from '../utils/logger.js';
+import { SymbolMetricsFetcher } from './marketDataFetcher.js';
 
 const POSITION_ALERT_WEBHOOK = 'https://open.feishu.cn/open-apis/bot/v2/hook/ed82732d-cd38-41f3-bb50-c2d9cfd081a4';
 
@@ -15,6 +16,7 @@ interface PositionValidationServiceOptions {
   alertLimiter?: AlertLimiter;
   notifier?: FeishuNotifier;
   intervalMs?: number;
+  metricsFetcher?: SymbolMetricsFetcher;
 }
 
 const RULE_LABEL_MAP: Record<ValidationIssue['rule'], string> = {
@@ -25,12 +27,25 @@ const RULE_LABEL_MAP: Record<ValidationIssue['rule'], string> = {
   margin_share_limit: '单币保证金占比',
   total_margin_usage: '总保证金使用率',
   funding_rate_limit: '资金费率',
-  data_missing: '数据异常'
+  data_missing: '数据异常',
+  oi_share_limit: '仓位占比OI检测',
+  oi_minimum: 'OI检测',
+  market_cap_minimum: '市值检测',
+  volume_24h_minimum: '24小时交易量检测'
 };
 
 function toPercent(value: number | null | undefined): string | undefined {
   if (value === null || value === undefined) return undefined;
   return `${(value * 100).toFixed(2)}%`;
+}
+
+function formatNumber(value: number | null | undefined): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  const abs = Math.abs(value);
+  if (abs >= 1) {
+    return value.toLocaleString('en-US', { maximumFractionDigits: value % 1 === 0 ? 0 : 2 });
+  }
+  return value.toFixed(4);
 }
 
 function resolveScope(issue: ValidationIssue): string {
@@ -51,6 +66,15 @@ function resolveValueLabel(issue: ValidationIssue): string | undefined {
   if ((issue.rule === 'whitelist_violation' || issue.rule === 'blacklist_violation') && typeof issue.value === 'number') {
     return issue.value.toFixed(2);
   }
+  if (issue.rule === 'oi_share_limit' && typeof issue.value === 'number') {
+    return toPercent(issue.value);
+  }
+  if (
+    (issue.rule === 'oi_minimum' || issue.rule === 'market_cap_minimum' || issue.rule === 'volume_24h_minimum') &&
+    typeof issue.value === 'number'
+  ) {
+    return formatNumber(issue.value);
+  }
   return undefined;
 }
 
@@ -61,6 +85,15 @@ function resolveThresholdLabel(issue: ValidationIssue): string | undefined {
   if (issue.rule === 'leverage_limit' && typeof issue.threshold === 'number') {
     return issue.threshold.toFixed(2);
   }
+  if (issue.rule === 'oi_share_limit' && typeof issue.threshold === 'number') {
+    return toPercent(issue.threshold);
+  }
+  if (
+    (issue.rule === 'oi_minimum' || issue.rule === 'market_cap_minimum' || issue.rule === 'volume_24h_minimum') &&
+    typeof issue.threshold === 'number'
+  ) {
+    return formatNumber(issue.threshold);
+  }
   return undefined;
 }
 
@@ -70,6 +103,7 @@ export class PositionValidationService {
   private readonly alertLimiter: AlertLimiter;
   private readonly notifier: FeishuNotifier;
   private readonly intervalMs: number;
+  private readonly metricsFetcher: SymbolMetricsFetcher;
   private running = false;
 
   constructor(options?: PositionValidationServiceOptions) {
@@ -78,6 +112,7 @@ export class PositionValidationService {
     this.alertLimiter = options?.alertLimiter ?? new AlertLimiter();
     this.notifier = options?.notifier ?? new FeishuNotifier({ webhookUrl: POSITION_ALERT_WEBHOOK });
     this.intervalMs = options?.intervalMs ?? appConfig.positionValidationIntervalMs;
+    this.metricsFetcher = options?.metricsFetcher ?? new SymbolMetricsFetcher();
   }
 
   getIntervalMs(): number {
@@ -94,7 +129,8 @@ export class PositionValidationService {
     const startedAt = Date.now();
     try {
       const context = await this.fetcher.fetchAccountContext();
-      const issues = this.ruleEngine.evaluate(context);
+      const metrics = await this.metricsFetcher.fetchMetrics(context.snapshots);
+      const issues = this.ruleEngine.evaluate(context, metrics);
       const events = this.alertLimiter.process(issues, context.fetchedAt);
 
       if (events.length === 0) {
