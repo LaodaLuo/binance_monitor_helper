@@ -31,10 +31,6 @@ function groupPositionsBySymbol(snapshots: PositionSnapshot[]): Map<string, Posi
   return grouped;
 }
 
-function aggregatePositionAmount(positions: PositionSnapshot[]): number {
-  return positions.reduce((sum, position) => sum + Math.abs(position.positionAmt), 0);
-}
-
 function aggregateNotional(positions: PositionSnapshot[]): number {
   return positions.reduce((sum, position) => sum + Math.abs(position.notional), 0);
 }
@@ -327,6 +323,7 @@ export class PositionRuleEngine {
     const minOpenInterest = 2_000_000;
     const minMarketCap = 50_000_000;
     const minVolume24h = 1_000_000;
+    const minFdmc = 150_000_000;
     const maxHhi = 0.2;
 
     for (const [symbol, positions] of groupedBySymbol.entries()) {
@@ -337,17 +334,19 @@ export class PositionRuleEngine {
       const notifyRecovery = baseRule.notifyRecovery;
       const missingFields = new Set<string>();
 
-      const openInterest = metrics?.openInterest ?? null;
-      if (openInterest !== null && openInterest > 0) {
-        const totalAmount = aggregatePositionAmount(positions);
-        const share = totalAmount / openInterest;
+      const openInterestSize = metrics?.openInterest ?? null;
+      const referencePrice = metrics?.referencePrice ?? null;
+      const openInterestNotional = metrics?.openInterestNotional ?? null;
+      if (openInterestNotional !== null && openInterestNotional > 0) {
+        const totalNotional = aggregateNotional(positions);
+        const share = totalNotional / openInterestNotional;
         if (share > shareThreshold) {
           issues.push({
             rule: 'oi_share_limit',
             baseAsset: symbol,
             direction: 'global',
             severity: 'critical',
-            message: `${symbol} 持仓总量占 OI ${(share * 100).toFixed(2)}%，超过阈值 ${(shareThreshold * 100).toFixed(
+            message: `${symbol} 持仓名义金额占 OI ${(share * 100).toFixed(2)}%，超过阈值 ${(shareThreshold * 100).toFixed(
               2
             )}%`,
             cooldownMinutes,
@@ -356,31 +355,40 @@ export class PositionRuleEngine {
             threshold: shareThreshold,
             details: {
               symbol,
-              openInterest,
-              positionAmount: totalAmount
+              openInterestSize,
+              referencePrice,
+              openInterestNotional,
+              positionNotional: totalNotional
             }
           });
         }
 
-        if (openInterest < minOpenInterest) {
+        if (openInterestNotional < minOpenInterest) {
           issues.push({
             rule: 'oi_minimum',
             baseAsset: symbol,
             direction: 'global',
             severity: 'warning',
-            message: `${symbol} 当前 OI ${openInterest.toLocaleString()} 低于阈值 ${minOpenInterest.toLocaleString()}`,
+            message: `${symbol} 当前 OI 名义金额 ${openInterestNotional.toLocaleString()} 低于阈值 ${minOpenInterest.toLocaleString()}`,
             cooldownMinutes,
             notifyOnRecovery: notifyRecovery,
-            value: openInterest,
+            value: openInterestNotional,
             threshold: minOpenInterest,
             details: {
               symbol,
-              openInterest
+              openInterestSize,
+              referencePrice,
+              openInterestNotional
             }
           });
         }
       } else {
         missingFields.add('OI');
+        if (referencePrice === null) {
+          missingFields.add('价格');
+        } else {
+          missingFields.add('OI名义金额');
+        }
       }
 
       const marketCap = metrics?.marketCap ?? null;
@@ -450,6 +458,29 @@ export class PositionRuleEngine {
         }
       } else {
         missingFields.add('集中度HHI');
+      }
+
+      const fdmc = metrics?.fdmc ?? null;
+      if (fdmc !== null) {
+        if (fdmc < minFdmc) {
+          issues.push({
+            rule: 'fdmc_minimum',
+            baseAsset: symbol,
+            direction: 'global',
+            severity: 'warning',
+            message: `${symbol} 完全稀释市值 ${fdmc.toLocaleString()} 低于阈值 ${minFdmc.toLocaleString()}`,
+            cooldownMinutes,
+            notifyOnRecovery: notifyRecovery,
+            value: fdmc,
+            threshold: minFdmc,
+            details: {
+              symbol,
+              fdmc
+            }
+          });
+        }
+      } else {
+        missingFields.add('完全稀释市值');
       }
 
       if (missingFields.size > 0) {

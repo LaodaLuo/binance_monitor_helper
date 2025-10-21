@@ -38,7 +38,8 @@ export type ValidationRuleType =
   | 'oi_minimum'
   | 'market_cap_minimum'
   | 'volume_24h_minimum'
-  | 'concentration_hhi_limit';
+  | 'concentration_hhi_limit'
+  | 'fdmc_minimum';
 
 export type ValidationSeverity = 'warning' | 'critical';
 
@@ -80,8 +81,11 @@ export interface SymbolMetrics {
   symbol: string;
   baseAsset: string;
   openInterest: number | null;
+  referencePrice: number | null;
+  openInterestNotional: number | null;
   marketCap: number | null;
   volume24h: number | null;
   hhi: number | null;
+  fdmc: number | null;
   fetchedAt: number;
 }

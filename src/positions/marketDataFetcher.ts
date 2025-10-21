@@ -13,6 +13,7 @@ interface TokenInfoData {
   marketCap: number | null;
   volume24h: number | null;
   hhi: number | null;
+  fdmc: number | null;
 }
 
 interface SymbolMetricsFetcherOptions {
@@ -24,6 +25,46 @@ interface SymbolMetricsFetcherOptions {
 const DEFAULT_CACHE_TTL_MS = 3 * 60 * 1000;
 const DEFAULT_CONCURRENCY = 5;
 const DEFAULT_APEX_BASE_URL = 'https://www.binance.com';
+
+function groupSnapshotsBySymbol(snapshots: PositionSnapshot[]): Map<string, PositionSnapshot[]> {
+  const map = new Map<string, PositionSnapshot[]>();
+  for (const snapshot of snapshots) {
+    const list = map.get(snapshot.symbol) ?? [];
+    list.push(snapshot);
+    map.set(snapshot.symbol, list);
+  }
+  return map;
+}
+
+function computeReferencePrice(positions: PositionSnapshot[]): number | null {
+  const candidates: number[] = [];
+  for (const position of positions) {
+    const markPrice = Math.abs(position.markPrice);
+    if (Number.isFinite(markPrice) && markPrice > 0) {
+      candidates.push(markPrice);
+      continue;
+    }
+    const amount = Math.abs(position.positionAmt);
+    const notional = Math.abs(position.notional);
+    if (amount > 0 && notional > 0) {
+      const derived = notional / amount;
+      if (Number.isFinite(derived) && derived > 0) {
+        candidates.push(derived);
+      }
+    }
+  }
+  if (candidates.length === 0) {
+    return null;
+  }
+  const sum = candidates.reduce((acc, price) => acc + price, 0);
+  return sum / candidates.length;
+}
+
+function computeOpenInterestNotional(openInterest: number | null, referencePrice: number | null): number | null {
+  if (openInterest === null || openInterest <= 0) return null;
+  if (referencePrice === null || referencePrice <= 0) return null;
+  return openInterest * referencePrice;
+}
 
 export class SymbolMetricsFetcher {
   private readonly futuresClient: AxiosInstance;
@@ -56,18 +97,25 @@ export class SymbolMetricsFetcher {
     ]);
 
     const metrics = new Map<string, SymbolMetrics>();
+    const groupedSnapshots = groupSnapshotsBySymbol(snapshots);
     for (const symbol of symbols) {
+      const symbolSnapshots = groupedSnapshots.get(symbol) ?? [];
       const baseAssetFromSnapshot =
-        snapshots.find((snapshot) => snapshot.symbol === symbol)?.baseAsset ?? symbol;
+        symbolSnapshots[0]?.baseAsset ?? snapshots.find((snapshot) => snapshot.symbol === symbol)?.baseAsset ?? symbol;
       const openInterest = openInterestMap.get(symbol) ?? null;
       const tokenInfo = tokenInfoMap.get(symbol);
+      const referencePrice = computeReferencePrice(symbolSnapshots);
+      const openInterestNotional = computeOpenInterestNotional(openInterest, referencePrice);
       metrics.set(symbol, {
         symbol,
         baseAsset: baseAssetFromSnapshot,
         openInterest,
+        referencePrice,
+        openInterestNotional,
         marketCap: tokenInfo?.marketCap ?? null,
         volume24h: tokenInfo?.volume24h ?? null,
         hhi: tokenInfo?.hhi ?? null,
+        fdmc: tokenInfo?.fdmc ?? null,
         fetchedAt: now
       });
     }
@@ -166,7 +214,7 @@ export class SymbolMetricsFetcher {
     const { base } = resolveSymbolParts(symbol);
     if (!base) {
       logger.warn({ symbol }, 'Unable to resolve base asset for token info');
-      return { marketCap: null, volume24h: null, hhi: null };
+      return { marketCap: null, volume24h: null, hhi: null, fdmc: null };
     }
 
     try {
@@ -174,26 +222,32 @@ export class SymbolMetricsFetcher {
         code?: string;
         message?: string | null;
         messageDetail?: string | null;
-        data?: { mc?: string | number | null; v?: string | number | null; hhi?: string | number | null };
+        data?: {
+          mc?: string | number | null;
+          v?: string | number | null;
+          hhi?: string | number | null;
+          fdmc?: string | number | null;
+        };
       }>('/bapi/apex/v1/friendly/apex/marketing/web/token-info', {
         params: { symbol: base }
       });
 
       if (data?.code !== '000000' || !data?.data) {
         logger.warn({ symbol, response: data }, 'Token info response indicates failure');
-        return { marketCap: null, volume24h: null, hhi: null };
+        return { marketCap: null, volume24h: null, hhi: null, fdmc: null };
       }
 
       const marketCap = this.parseNumber(data.data.mc);
       const volume24h = this.parseNumber(data.data.v);
       const hhi = this.parseNumber(data.data.hhi);
-      if (marketCap === null || volume24h === null || hhi === null) {
+      const fdmc = this.parseNumber(data.data.fdmc);
+      if (marketCap === null || volume24h === null || hhi === null || fdmc === null) {
         logger.warn({ symbol, payload: data.data }, 'Token info data missing numeric fields');
       }
-      return { marketCap, volume24h, hhi };
+      return { marketCap, volume24h, hhi, fdmc };
     } catch (error) {
       logger.warn({ symbol, error }, 'Failed to fetch token info data');
-      return { marketCap: null, volume24h: null, hhi: null };
+      return { marketCap: null, volume24h: null, hhi: null, fdmc: null };
     }
   }
 

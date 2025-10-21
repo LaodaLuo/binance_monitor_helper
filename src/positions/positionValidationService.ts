@@ -32,7 +32,8 @@ const RULE_LABEL_MAP: Record<ValidationIssue['rule'], string> = {
   oi_minimum: 'OI检测',
   market_cap_minimum: '市值检测',
   volume_24h_minimum: '24小时交易量检测',
-  concentration_hhi_limit: '集中度检测'
+  concentration_hhi_limit: '集中度检测',
+  fdmc_minimum: '完全稀释市值检测'
 };
 
 function toPercent(value: number | null | undefined): string | undefined {
@@ -74,7 +75,8 @@ function resolveValueLabel(issue: ValidationIssue): string | undefined {
     (issue.rule === 'oi_minimum' ||
       issue.rule === 'market_cap_minimum' ||
       issue.rule === 'volume_24h_minimum' ||
-      issue.rule === 'concentration_hhi_limit') &&
+      issue.rule === 'concentration_hhi_limit' ||
+      issue.rule === 'fdmc_minimum') &&
     typeof issue.value === 'number'
   ) {
     return formatNumber(issue.value);
@@ -96,7 +98,8 @@ function resolveThresholdLabel(issue: ValidationIssue): string | undefined {
     (issue.rule === 'oi_minimum' ||
       issue.rule === 'market_cap_minimum' ||
       issue.rule === 'volume_24h_minimum' ||
-      issue.rule === 'concentration_hhi_limit') &&
+      issue.rule === 'concentration_hhi_limit' ||
+      issue.rule === 'fdmc_minimum') &&
     typeof issue.threshold === 'number'
   ) {
     return formatNumber(issue.threshold);
