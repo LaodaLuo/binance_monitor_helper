@@ -12,6 +12,7 @@ interface CacheEntry<T> {
 interface TokenInfoData {
   marketCap: number | null;
   volume24h: number | null;
+  hhi: number | null;
 }
 
 interface SymbolMetricsFetcherOptions {
@@ -66,6 +67,7 @@ export class SymbolMetricsFetcher {
         openInterest,
         marketCap: tokenInfo?.marketCap ?? null,
         volume24h: tokenInfo?.volume24h ?? null,
+        hhi: tokenInfo?.hhi ?? null,
         fetchedAt: now
       });
     }
@@ -164,7 +166,7 @@ export class SymbolMetricsFetcher {
     const { base } = resolveSymbolParts(symbol);
     if (!base) {
       logger.warn({ symbol }, 'Unable to resolve base asset for token info');
-      return { marketCap: null, volume24h: null };
+      return { marketCap: null, volume24h: null, hhi: null };
     }
 
     try {
@@ -172,25 +174,26 @@ export class SymbolMetricsFetcher {
         code?: string;
         message?: string | null;
         messageDetail?: string | null;
-        data?: { mc?: string | number | null; v?: string | number | null };
+        data?: { mc?: string | number | null; v?: string | number | null; hhi?: string | number | null };
       }>('/bapi/apex/v1/friendly/apex/marketing/web/token-info', {
         params: { symbol: base }
       });
 
       if (data?.code !== '000000' || !data?.data) {
         logger.warn({ symbol, response: data }, 'Token info response indicates failure');
-        return { marketCap: null, volume24h: null };
+        return { marketCap: null, volume24h: null, hhi: null };
       }
 
       const marketCap = this.parseNumber(data.data.mc);
       const volume24h = this.parseNumber(data.data.v);
-      if (marketCap === null || volume24h === null) {
+      const hhi = this.parseNumber(data.data.hhi);
+      if (marketCap === null || volume24h === null || hhi === null) {
         logger.warn({ symbol, payload: data.data }, 'Token info data missing numeric fields');
       }
-      return { marketCap, volume24h };
+      return { marketCap, volume24h, hhi };
     } catch (error) {
       logger.warn({ symbol, error }, 'Failed to fetch token info data');
-      return { marketCap: null, volume24h: null };
+      return { marketCap: null, volume24h: null, hhi: null };
     }
   }
 

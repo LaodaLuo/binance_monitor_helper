@@ -181,6 +181,7 @@ describe('PositionRuleEngine', () => {
           openInterest: 500, // share = 50 / 500 = 0.1 > 0.02
           marketCap: 100_000_000,
           volume24h: 10_000_000,
+          hhi: 0.1,
           fetchedAt: now
         }
       ]
@@ -228,6 +229,7 @@ describe('PositionRuleEngine', () => {
           openInterest: 5_000_000,
           marketCap: 10_000_000, // below 50m
           volume24h: 500_000, // below 1m
+          hhi: 0.15,
           fetchedAt: now
         }
       ]
@@ -274,6 +276,7 @@ describe('PositionRuleEngine', () => {
           openInterest: null,
           marketCap: null,
           volume24h: null,
+          hhi: null,
           fetchedAt: now
         }
       ]
@@ -283,6 +286,53 @@ describe('PositionRuleEngine', () => {
     const dataMissingIssue = issues.find((issue) => issue.rule === 'data_missing' && issue.baseAsset === 'BTCUSDT');
     expect(dataMissingIssue).toBeDefined();
     expect(Array.isArray(dataMissingIssue?.details?.missingFields)).toBe(true);
+    expect(dataMissingIssue?.details?.missingFields).toContain('集中度HHI');
+  });
+
+  it('emits concentration issue when HHI exceeds threshold', () => {
+    const context = {
+      totalInitialMargin: 0,
+      totalMarginBalance: 1_000_000,
+      availableBalance: 800_000,
+      snapshots: [
+        {
+          baseAsset: 'BTC',
+          symbol: 'BTCUSDT',
+          positionAmt: 5,
+          notional: 100_000,
+          leverage: 1,
+          initialMargin: 500,
+          isolatedMargin: 0,
+          marginType: 'cross' as const,
+          direction: 'long' as const,
+          markPrice: 20_000,
+          predictedFundingRate: -0.001,
+          updatedAt: now
+        }
+      ],
+      fetchedAt: now
+    };
+
+    const metrics = new Map<string, SymbolMetrics>([
+      [
+        'BTCUSDT',
+        {
+          symbol: 'BTCUSDT',
+          baseAsset: 'BTC',
+          openInterest: 10_000_000,
+          marketCap: 200_000_000,
+          volume24h: 5_000_000,
+          hhi: 0.25,
+          fetchedAt: now
+        }
+      ]
+    ]);
+
+    const issues = engine.evaluate(context, metrics);
+    const hhiIssue = issues.find((issue) => issue.rule === 'concentration_hhi_limit' && issue.baseAsset === 'BTCUSDT');
+    expect(hhiIssue).toBeDefined();
+    expect(hhiIssue?.threshold).toBeCloseTo(0.2);
+    expect(hhiIssue?.value).toBeCloseTo(0.25);
   });
 
   it('flags blacklist violation for prohibited short positions', () => {

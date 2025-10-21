@@ -327,6 +327,7 @@ export class PositionRuleEngine {
     const minOpenInterest = 2_000_000;
     const minMarketCap = 50_000_000;
     const minVolume24h = 1_000_000;
+    const maxHhi = 0.2;
 
     for (const [symbol, positions] of groupedBySymbol.entries()) {
       if (positions.length === 0) continue;
@@ -426,6 +427,29 @@ export class PositionRuleEngine {
         }
       } else {
         missingFields.add('24小时成交量');
+      }
+
+      const hhi = metrics?.hhi ?? null;
+      if (hhi !== null) {
+        if (hhi > maxHhi) {
+          issues.push({
+            rule: 'concentration_hhi_limit',
+            baseAsset: symbol,
+            direction: 'global',
+            severity: 'warning',
+            message: `${symbol} 市场集中度 HHI ${(hhi * 100).toFixed(2)}% 高于阈值 ${(maxHhi * 100).toFixed(2)}%`,
+            cooldownMinutes,
+            notifyOnRecovery: notifyRecovery,
+            value: hhi,
+            threshold: maxHhi,
+            details: {
+              symbol,
+              hhi
+            }
+          });
+        }
+      } else {
+        missingFields.add('集中度HHI');
       }
 
       if (missingFields.size > 0) {
