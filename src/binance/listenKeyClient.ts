@@ -37,13 +37,13 @@ export class ListenKeyClient {
   }
 
   async destroy(listenKey: string): Promise<void> {
-    try {
-      await this.client.delete('/fapi/v1/listenKey', {
-        params: { listenKey }
-      });
-      logger.info({ listenKey }, 'Destroyed listenKey');
-    } catch (error) {
-      logger.warn({ listenKey, error }, 'Failed to destroy listenKey');
-    }
+    // try {
+    //   await this.client.delete('/fapi/v1/listenKey', {
+    //     params: { listenKey }
+    //   });
+    //   logger.info({ listenKey }, 'Destroyed listenKey');
+    // } catch (error) {
+    //   logger.warn({ listenKey, error }, 'Failed to destroy listenKey');
+    // }
   }
 }
