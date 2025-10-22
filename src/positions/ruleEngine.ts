@@ -323,7 +323,6 @@ export class PositionRuleEngine {
     const minOpenInterest = 2_000_000;
     const minMarketCap = 50_000_000;
     const minVolume24h = 1_000_000;
-    const minFdmc = 150_000_000;
     const maxHhi = 0.2;
 
     for (const [symbol, positions] of groupedBySymbol.entries()) {
@@ -458,29 +457,6 @@ export class PositionRuleEngine {
         }
       } else {
         missingFields.add('集中度HHI');
-      }
-
-      const fdmc = metrics?.fdmc ?? null;
-      if (fdmc !== null) {
-        if (fdmc < minFdmc) {
-          issues.push({
-            rule: 'fdmc_minimum',
-            baseAsset: symbol,
-            direction: 'global',
-            severity: 'warning',
-            message: `${symbol} 完全稀释市值 ${fdmc.toLocaleString()} 低于阈值 ${minFdmc.toLocaleString()}`,
-            cooldownMinutes,
-            notifyOnRecovery: notifyRecovery,
-            value: fdmc,
-            threshold: minFdmc,
-            details: {
-              symbol,
-              fdmc
-            }
-          });
-        }
-      } else {
-        missingFields.add('完全稀释市值');
       }
 
       if (missingFields.size > 0) {

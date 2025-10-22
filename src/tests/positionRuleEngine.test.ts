@@ -245,11 +245,11 @@ describe('PositionRuleEngine', () => {
     const marketCapIssue = issues.find((issue) => issue.rule === 'market_cap_minimum' && issue.baseAsset === 'BTCUSDT');
     expect(marketCapIssue).toBeDefined();
     expect(marketCapIssue?.threshold).toBe(50_000_000);
+
     const volumeIssue = issues.find((issue) => issue.rule === 'volume_24h_minimum' && issue.baseAsset === 'BTCUSDT');
     expect(volumeIssue).toBeDefined();
-    const fdmcIssue = issues.find((issue) => issue.rule === 'fdmc_minimum' && issue.baseAsset === 'BTCUSDT');
-    expect(fdmcIssue).toBeDefined();
-    expect(fdmcIssue?.threshold).toBe(150_000_000);
+
+    expect(issues.some((issue) => issue.message.includes('完全稀释市值'))).toBe(false);
   });
 
   it('reports missing data when metrics are unavailable', () => {
@@ -299,7 +299,6 @@ describe('PositionRuleEngine', () => {
     expect(dataMissingIssue).toBeDefined();
     expect(Array.isArray(dataMissingIssue?.details?.missingFields)).toBe(true);
     expect(dataMissingIssue?.details?.missingFields).toContain('集中度HHI');
-    expect(dataMissingIssue?.details?.missingFields).toContain('完全稀释市值');
     expect(dataMissingIssue?.details?.missingFields).toContain('OI');
     expect(dataMissingIssue?.details?.missingFields).toContain('价格');
   });
@@ -353,7 +352,7 @@ describe('PositionRuleEngine', () => {
     expect(hhiIssue?.value).toBeCloseTo(0.25);
   });
 
-  it('emits fdmc issue when fully diluted market cap is below threshold', () => {
+  it('does not emit alerts for fully diluted market cap', () => {
     const context = {
       totalInitialMargin: 0,
       totalMarginBalance: 1_000_000,
@@ -396,10 +395,7 @@ describe('PositionRuleEngine', () => {
     ]);
 
     const issues = engine.evaluate(context, metrics);
-    const fdmcIssue = issues.find((issue) => issue.rule === 'fdmc_minimum' && issue.baseAsset === 'BTCUSDT');
-    expect(fdmcIssue).toBeDefined();
-    expect(fdmcIssue?.value).toBe(120_000_000);
-    expect(fdmcIssue?.threshold).toBe(150_000_000);
+    expect(issues.some((issue) => issue.message.includes('完全稀释市值'))).toBe(false);
   });
 
   it('flags blacklist violation for prohibited short positions', () => {

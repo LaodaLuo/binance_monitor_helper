@@ -38,8 +38,7 @@ export type ValidationRuleType =
   | 'oi_minimum'
   | 'market_cap_minimum'
   | 'volume_24h_minimum'
-  | 'concentration_hhi_limit'
-  | 'fdmc_minimum';
+  | 'concentration_hhi_limit';
 
 export type ValidationSeverity = 'warning' | 'critical';
 
