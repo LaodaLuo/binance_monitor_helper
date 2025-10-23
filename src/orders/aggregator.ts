@@ -26,11 +26,15 @@ interface AggregatorOptions {
   metricsProvider?: AccountMetricsProvider;
 }
 
+const PROCESSED_EVENT_TTL_MS = 60_000;
+
 export class OrderAggregator {
   private readonly aggregationWindowMs: number;
   private readonly tracker = new OrderStateTracker();
   private readonly metricsProvider: AccountMetricsProvider;
   private readonly stopPresentationCache = new Map<string, OrderPresentation>();
+  private readonly suppressedStopClientIds = new Set<string>();
+  private readonly processedEvents = new Map<string, number>();
   private notificationHandler?: NotificationHandler;
 
   constructor(options: AggregatorOptions = {}) {
@@ -47,28 +51,58 @@ export class OrderAggregator {
       throw new Error('Notification handler not registered');
     }
 
+    const dedupeKey = this.buildEventKey(event);
+    if (this.hasProcessedEvent(dedupeKey)) {
+      logger.debug(
+        { clientOrderId: event.clientOrderId, orderId: event.orderId },
+        'Duplicate order event detected, skipping'
+      );
+      return;
+    }
+
     const presentation = this.resolvePresentation(event);
     const source = presentation.source;
 
     if (source === '其他' && event.status === 'NEW') {
       logger.debug({ event }, 'Ignoring NEW status for general order');
+      this.markEventProcessed(dedupeKey, event.eventTime.getTime());
       return;
     }
 
     const context = this.tracker.update(event, presentation);
 
-    if (source === '止盈' || source === '止损' || source === '追踪止损') {
-      await this.handleStopLikeOrder(event, context);
-      return;
+    try {
+      if (source === '止盈' || source === '止损' || source === '追踪止损') {
+        await this.handleStopLikeOrder(event, context);
+      } else {
+        await this.handleGeneralOrder(event, context);
+      }
+      this.markEventProcessed(dedupeKey, event.eventTime.getTime());
+    } catch (error) {
+      this.processedEvents.delete(dedupeKey);
+      throw error;
     }
-
-    await this.handleGeneralOrder(event, context);
   }
 
   private async handleStopLikeOrder(
     event: OrderEvent,
     context: AggregationContext
   ): Promise<void> {
+    const originalClientId = event.originalClientOrderId;
+    const isExecutionOrder = Boolean(originalClientId && originalClientId !== event.clientOrderId);
+
+    if (isExecutionOrder && originalClientId) {
+      this.suppressedStopClientIds.add(originalClientId);
+    } else if (!isExecutionOrder && this.suppressedStopClientIds.has(event.clientOrderId) && event.status === 'FILLED') {
+      logger.debug(
+        { clientOrderId: event.clientOrderId, orderId: event.orderId },
+        'Skipping parent stop order fill because execution order already notified'
+      );
+      this.suppressedStopClientIds.delete(event.clientOrderId);
+      this.clearContext(event);
+      return;
+    }
+
     switch (event.status) {
       case 'NEW': {
         const triggerCreationTypes = ['MARKET', 'LIMIT'];
@@ -482,8 +516,54 @@ export class OrderAggregator {
     logger.debug({ key }, 'Clearing aggregation context');
     this.tracker.delete(event);
     this.stopPresentationCache.delete(event.clientOrderId);
+    this.suppressedStopClientIds.delete(event.clientOrderId);
     if (event.originalClientOrderId) {
       this.stopPresentationCache.delete(event.originalClientOrderId);
+    }
+  }
+
+  private buildEventKey(event: OrderEvent): string {
+    const raw = event.raw?.o;
+    const tradeTime = raw?.T ?? event.tradeTime.getTime();
+    const execType = raw?.x ?? '';
+    const lastQty = raw?.l ?? event.lastQuantity;
+    const cumulativeQty = raw?.z ?? event.cumulativeQuantity;
+    return [
+      event.symbol,
+      event.orderId,
+      event.clientOrderId,
+      event.status,
+      execType,
+      tradeTime,
+      lastQty,
+      cumulativeQty
+    ].join('|');
+  }
+
+  private hasProcessedEvent(key: string): boolean {
+    const timestamp = this.processedEvents.get(key);
+    if (timestamp === undefined) {
+      return false;
+    }
+    if (Date.now() - timestamp > PROCESSED_EVENT_TTL_MS) {
+      this.processedEvents.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  private markEventProcessed(key: string, timestamp: number): void {
+    this.processedEvents.set(key, timestamp);
+    this.pruneProcessedEvents();
+  }
+
+  private pruneProcessedEvents(): void {
+    if (this.processedEvents.size === 0) return;
+    const threshold = Date.now() - PROCESSED_EVENT_TTL_MS;
+    for (const [key, ts] of this.processedEvents.entries()) {
+      if (ts < threshold) {
+        this.processedEvents.delete(key);
+      }
     }
   }
 }

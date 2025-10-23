@@ -470,9 +470,10 @@ describe('OrderAggregator', () => {
     const filled = buildEvent({ o: 'LIMIT', X: 'FILLED', z: '1', l: '0.5', c: 'ORD-EDGE', p: '45000', sp: undefined });
 
     await aggregator.handleEvent(partial);
-    await vi.advanceTimersByTimeAsync(900);
+    vi.advanceTimersByTime(900);
     await aggregator.handleEvent(filled);
-    await vi.advanceTimersByTimeAsync(200);
+    vi.advanceTimersByTime(200);
+    await vi.runAllTimersAsync();
 
     expect(notifications).toHaveLength(1);
     expect(notifications[0].scenario).toBe(Scenario.GENERAL_AGGREGATED);
@@ -484,9 +485,10 @@ describe('OrderAggregator', () => {
     const filled = buildEvent({ o: 'STOP_MARKET', X: 'FILLED', z: '1', l: '0.3', c: 'TP-EDGE' });
 
     await aggregator.handleEvent(partial);
-    await vi.advanceTimersByTimeAsync(900);
+    vi.advanceTimersByTime(900);
     await aggregator.handleEvent(filled);
-    await vi.advanceTimersByTimeAsync(200);
+    vi.advanceTimersByTime(200);
+    await vi.runAllTimersAsync();
 
     expect(notifications).toHaveLength(1);
     expect(notifications[0].scenario).toBe(Scenario.SLTP_PARTIAL_COMPLETED);
@@ -498,18 +500,114 @@ describe('OrderAggregator', () => {
     const partialB = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.2', l: '0.2', c: 'ORD-REARM', p: '45000', sp: undefined });
 
     await aggregator.handleEvent(partialA);
-    await vi.advanceTimersByTimeAsync(1000);
+    vi.advanceTimersByTime(1000);
     await vi.runAllTimersAsync();
 
     expect(notifications).toHaveLength(1);
     expect(notifications[0].scenario).toBe(Scenario.GENERAL_TIMEOUT);
 
     await aggregator.handleEvent(partialB);
-    await vi.advanceTimersByTimeAsync(1000);
+    vi.advanceTimersByTime(1000);
     await vi.runAllTimersAsync();
 
     expect(notifications).toHaveLength(2);
     expect(notifications[1].scenario).toBe(Scenario.GENERAL_TIMEOUT);
+  });
+
+  it('suppresses parent stop fill once execution order notification is sent', async () => {
+    const creation = buildEvent({
+      o: 'TAKE_PROFIT_MARKET',
+      X: 'NEW',
+      x: 'NEW',
+      c: 'TP2-DUP',
+      q: '0.01',
+      z: '0',
+      l: '0',
+      ap: '0',
+      L: '0',
+      p: '0',
+      sp: '0.0008'
+    });
+
+    await aggregator.handleEvent(creation);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].scenario).toBe(Scenario.SLTP_NEW);
+
+    const executionFill = buildEvent({
+      c: 'EXEC-001',
+      C: 'TP2-DUP',
+      o: 'MARKET',
+      X: 'FILLED',
+      z: '0.01',
+      l: '0.01',
+      ap: '0.0008',
+      L: '0.0008',
+      p: '0',
+      sp: undefined,
+      rp: '0.1045'
+    });
+
+    await aggregator.handleEvent(executionFill);
+    expect(notifications).toHaveLength(2);
+    expect(notifications[1].title).toBe('BTCUSDT-反弹1/2清仓');
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
+
+    const parentFill = buildEvent({
+      c: 'TP2-DUP',
+      o: 'TAKE_PROFIT_MARKET',
+      X: 'FILLED',
+      z: '0.01',
+      l: '0.01',
+      ap: '0.0008',
+      L: '0.0008',
+      rp: '0.2089',
+      sp: '0.0008'
+    });
+
+    await aggregator.handleEvent(parentFill);
+    expect(notifications).toHaveLength(2);
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores duplicate filled event payloads for stop order', async () => {
+    const timestamp = Date.now();
+    const fill = buildEvent(
+      {
+        o: 'LIMIT',
+        X: 'FILLED',
+        q: '1',
+        z: '1',
+        l: '1',
+        c: 'TP-DUP'
+      },
+      {
+        E: timestamp,
+        T: timestamp
+      }
+    );
+
+    await aggregator.handleEvent(fill);
+    expect(notifications).toHaveLength(1);
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
+
+    const duplicate = buildEvent(
+      {
+        o: 'LIMIT',
+        X: 'FILLED',
+        q: '1',
+        z: '1',
+        l: '1',
+        c: 'TP-DUP'
+      },
+      {
+        E: timestamp,
+        T: timestamp
+      }
+    );
+
+    await aggregator.handleEvent(duplicate);
+    expect(notifications).toHaveLength(1);
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
   it('ignores SL/TP 触发生成的执行单创建', async () => {
