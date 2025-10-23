@@ -41,13 +41,30 @@ export class OrderStateTracker {
       events: []
     };
 
-    const lastQty = safeBig(event.lastQuantity);
-    const lastPrice = safeBig(event.lastPrice || event.averagePrice || event.orderPrice);
     const cumulativeQty = safeBig(event.cumulativeQuantity);
+    const averagePrice = safeBig(event.averagePrice);
+    const lastPrice = safeBig(event.lastPrice);
+    const orderPrice = safeBig(event.orderPrice);
 
-    let cumulativeQuote = safeBig(baseContext.cumulativeQuote);
-    if (lastQty.gt(0) && lastPrice.gt(0)) {
-      cumulativeQuote = cumulativeQuote.plus(lastQty.times(lastPrice));
+    let cumulativeQuote = ZERO;
+    if (cumulativeQty.gt(0)) {
+      if (averagePrice.gt(0)) {
+        cumulativeQuote = averagePrice.times(cumulativeQty);
+      } else if (lastPrice.gt(0)) {
+        cumulativeQuote = lastPrice.times(cumulativeQty);
+      } else if (orderPrice.gt(0)) {
+        cumulativeQuote = orderPrice.times(cumulativeQty);
+      }
+    }
+
+    let resolvedAveragePrice = event.averagePrice;
+
+    if ((resolvedAveragePrice === undefined || resolvedAveragePrice === '' || resolvedAveragePrice === '0') && cumulativeQty.gt(0) && cumulativeQuote.gt(0)) {
+      try {
+        resolvedAveragePrice = cumulativeQuote.div(cumulativeQty).toFixed(8);
+      } catch {
+        resolvedAveragePrice = event.lastPrice || event.orderPrice || '0';
+      }
     }
 
     const next: AggregationContext = {
@@ -57,21 +74,12 @@ export class OrderStateTracker {
       source: presentation.source,
       presentation,
       cumulativeQuantity: event.cumulativeQuantity,
-      cumulativeQuote: cumulativeQuote.toString(),
-      lastAveragePrice: event.averagePrice,
+      cumulativeQuote: cumulativeQuote.toFixed(8),
+      lastAveragePrice: resolvedAveragePrice,
       lastStatus: event.status,
       lastEventTime: event.eventTime,
       events: [...baseContext.events, event]
     };
-
-    // Guard against division by zero when Binance sends averagePrice "0"
-    if ((next.lastAveragePrice === '0' || next.lastAveragePrice === '') && cumulativeQty.gt(0)) {
-      try {
-        next.lastAveragePrice = cumulativeQuote.div(cumulativeQty).toFixed(8);
-      } catch {
-        // keep default
-      }
-    }
 
     this.store.set(key, next);
     return next;

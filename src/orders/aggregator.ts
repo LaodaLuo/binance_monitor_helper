@@ -209,8 +209,14 @@ export class OrderAggregator {
     if (!this.notificationHandler) return;
 
     const latestEvent = context.events[context.events.length - 1];
-    const cumulativeQty = this.safeBig(context.cumulativeQuantity) ?? new Big(0);
-    const cumulativeQuote = this.safeBig(context.cumulativeQuote) ?? new Big(0);
+    const cumulativeQty = this.safeBig(latestEvent.cumulativeQuantity) ?? new Big(0);
+    let cumulativeQuote = this.safeBig(context.cumulativeQuote);
+    if (!cumulativeQuote || cumulativeQuote.lte(0)) {
+      cumulativeQuote = this.resolveCumulativeQuote(latestEvent) ?? new Big(0);
+    }
+    const averagePrice = this.safeBig(latestEvent.averagePrice);
+    const lastPrice = this.safeBig(latestEvent.lastPrice);
+    const orderPrice = this.safeBig(latestEvent.orderPrice);
     const quoteAsset = resolveQuoteAsset(latestEvent.symbol) || undefined;
 
     const stopPriceCandidate =
@@ -222,20 +228,31 @@ export class OrderAggregator {
 
     let displayPrice = latestEvent.orderPrice;
     if (options.priceSource === 'average' || latestEvent.orderType === 'MARKET') {
-      if (cumulativeQty.gt(0) && cumulativeQuote.gt(0)) {
-        displayPrice = cumulativeQuote.div(cumulativeQty).toFixed(8);
-      } else if (context.lastAveragePrice && context.lastAveragePrice !== '0') {
-        displayPrice = context.lastAveragePrice;
-      } else if (latestEvent.averagePrice !== '0') {
-        displayPrice = latestEvent.averagePrice;
+      const formattedAverage =
+        (averagePrice && averagePrice.gt(0) && this.formatToFixed(averagePrice)) ||
+        (context.lastAveragePrice && context.lastAveragePrice !== '0' ? this.formatToFixed(context.lastAveragePrice) : undefined);
+      if (formattedAverage) {
+        displayPrice = formattedAverage;
+      } else if (lastPrice && lastPrice.gt(0)) {
+        displayPrice = this.formatToFixed(lastPrice) ?? displayPrice;
+      } else if (orderPrice && orderPrice.gt(0)) {
+        displayPrice = this.formatToFixed(orderPrice) ?? latestEvent.orderPrice;
       } else if (stopPriceCandidate) {
         displayPrice = stopPriceCandidate;
       }
     } else {
       if (!displayPrice || displayPrice === '0') {
-        if (stopPriceCandidate) {
+        if (orderPrice && orderPrice.gt(0)) {
+          displayPrice = latestEvent.orderPrice;
+        } else if (stopPriceCandidate) {
           displayPrice = stopPriceCandidate;
+        } else if (averagePrice && averagePrice.gt(0)) {
+          displayPrice = this.formatToFixed(averagePrice) ?? displayPrice;
+        } else if (lastPrice && lastPrice.gt(0)) {
+          displayPrice = this.formatToFixed(lastPrice) ?? displayPrice;
         }
+      } else if (orderPrice && orderPrice.gt(0)) {
+        displayPrice = latestEvent.orderPrice;
       }
     }
 
@@ -249,7 +266,7 @@ export class OrderAggregator {
     let tradePnlRaw: string | undefined;
     let tradePnlDisplay: string | undefined;
 
-    const shouldProvideAggregates = options.includeCumulative && cumulativeQuote.gt(0);
+    const shouldProvideAggregates = options.includeCumulative && cumulativeQty.gt(0) && cumulativeQuote.gt(0);
 
     if (shouldProvideAggregates) {
       cumulativeQuoteRaw = cumulativeQuote.toFixed(8);
@@ -313,6 +330,42 @@ export class OrderAggregator {
 
   private formatPercent(value: Big): string {
     return `${value.times(100).toFixed(2)}%`;
+  }
+
+  private formatToFixed(value: string | Big | null | undefined): string | undefined {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+    try {
+      const big = value instanceof Big ? value : new Big(value);
+      return big.toFixed(8);
+    } catch {
+      return typeof value === 'string' ? value : undefined;
+    }
+  }
+
+  private resolveCumulativeQuote(event: OrderEvent): Big | null {
+    const cumulativeQty = this.safeBig(event.cumulativeQuantity);
+    if (!cumulativeQty || cumulativeQty.lte(0)) {
+      return null;
+    }
+
+    const averagePrice = this.safeBig(event.averagePrice);
+    if (averagePrice && averagePrice.gt(0)) {
+      return averagePrice.times(cumulativeQty);
+    }
+
+    const lastPrice = this.safeBig(event.lastPrice);
+    if (lastPrice && lastPrice.gt(0)) {
+      return lastPrice.times(cumulativeQty);
+    }
+
+    const orderPrice = this.safeBig(event.orderPrice);
+    if (orderPrice && orderPrice.gt(0)) {
+      return orderPrice.times(cumulativeQty);
+    }
+
+    return null;
   }
 
   private sumRealizedPnl(context: AggregationContext): Big {
