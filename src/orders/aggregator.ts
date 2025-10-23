@@ -2,7 +2,11 @@ import Big from 'big.js';
 import { appConfig } from '../config/index.js';
 import { logger } from '../utils/logger.js';
 import { resolveQuoteAsset } from '../utils/symbol.js';
-import { BinanceAccountMetricsProvider, type AccountMetricsProvider } from './accountMetricsProvider.js';
+import {
+  BinanceAccountMetricsProvider,
+  type AccountMetricsProvider,
+  type AccountSummary
+} from './accountMetricsProvider.js';
 import { OrderStateTracker } from './stateTracker.js';
 import {
   Scenario,
@@ -267,6 +271,8 @@ export class OrderAggregator {
     let cumulativeQuoteRatioDisplay: string | undefined;
     let tradePnlRaw: string | undefined;
     let tradePnlDisplay: string | undefined;
+    let longShortRatioRaw: string | undefined;
+    let longShortRatioDisplay: string | undefined;
 
     const shouldProvideAggregates = options.includeCumulative && cumulativeQty.gt(0) && cumulativeQuote.gt(0);
 
@@ -276,10 +282,20 @@ export class OrderAggregator {
 
       try {
         const summary = await this.metricsProvider.getSummary();
-        if (summary?.totalFunds && summary.totalFunds > 0) {
-          const ratioValue = cumulativeQuote.div(summary.totalFunds);
-          cumulativeQuoteRatioRaw = ratioValue.toFixed(6);
-          cumulativeQuoteRatioDisplay = this.formatPercent(ratioValue);
+        if (summary) {
+          if (summary.totalFunds && summary.totalFunds > 0) {
+            const ratioValue = cumulativeQuote.div(summary.totalFunds);
+            cumulativeQuoteRatioRaw = ratioValue.toFixed(6);
+            cumulativeQuoteRatioDisplay = this.formatPercent(ratioValue);
+          }
+
+          if (this.shouldIncludeLongShortRatio(options.stateLabel)) {
+            const longShortRatio = this.computeLongShortRatio(summary);
+            if (longShortRatio) {
+              longShortRatioRaw = longShortRatio.raw;
+              longShortRatioDisplay = longShortRatio.display;
+            }
+          }
         }
       } catch (error) {
         logger.warn({ error }, 'Failed to obtain account summary for ratio calculation');
@@ -308,10 +324,56 @@ export class OrderAggregator {
       cumulativeQuoteRatio: cumulativeQuoteRatioRaw,
       cumulativeQuoteRatioDisplay,
       tradePnl: tradePnlRaw,
-      tradePnlDisplay
+      tradePnlDisplay,
+      longShortRatio: longShortRatioRaw,
+      longShortRatioDisplay
     };
 
     await this.notificationHandler(payload);
+  }
+
+  private shouldIncludeLongShortRatio(stateLabel: string): boolean {
+    return stateLabel.includes('成交');
+  }
+
+  private computeLongShortRatio(summary: AccountSummary | null): { raw: string; display: string } | null {
+    if (!summary) return null;
+
+    let totalLong = new Big(0);
+    let totalShort = new Big(0);
+
+    for (const snapshot of summary.positions.values()) {
+      const notional = this.safeBig(snapshot.notional);
+      if (!notional || notional.lte(0)) {
+        continue;
+      }
+      if (snapshot.direction === 'long') {
+        totalLong = totalLong.plus(notional);
+      } else if (snapshot.direction === 'short') {
+        totalShort = totalShort.plus(notional);
+      }
+    }
+
+    if (totalLong.eq(0) && totalShort.eq(0)) {
+      return null;
+    }
+
+    if (totalShort.eq(0)) {
+      if (totalLong.eq(0)) {
+        return null;
+      }
+      return {
+        raw: 'Infinity:1',
+        display: '∞:1.00'
+      };
+    }
+
+    const normalizedLong = totalLong.div(totalShort);
+    const longDisplay = normalizedLong.toFixed(2);
+    return {
+      raw: `${normalizedLong.toFixed(6)}:1`,
+      display: `${longDisplay}:1.00`
+    };
   }
 
   private formatAmount(value: Big, asset?: string): string {

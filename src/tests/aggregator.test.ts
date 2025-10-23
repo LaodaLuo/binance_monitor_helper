@@ -1,6 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AccountMetricsProvider, AccountSummary } from '../orders/accountMetricsProvider.js';
 import type { RawOrderTradeUpdate } from '../orders/types.js';
+import type { PositionSnapshot } from '../positions/types.js';
 
 type AggregatorModule = typeof import('../orders/aggregator.js');
 type TypesModule = typeof import('../orders/types.js');
@@ -12,6 +13,10 @@ let toOrderEvent: EventMapperModule['toOrderEvent'];
 let metricsProvider: AccountMetricsProvider;
 let metricsSummary: AccountSummary;
 let getSummaryMock: ReturnType<typeof vi.fn>;
+
+function buildPositionKey(symbol: string, direction: PositionSnapshot['direction']): string {
+  return `${symbol}:${direction}`;
+}
 
 const BASE_EVENT: RawOrderTradeUpdate = {
   e: 'ORDER_TRADE_UPDATE',
@@ -88,6 +93,45 @@ describe('OrderAggregator', () => {
       fetchedAt: Date.now(),
       positions: new Map()
     };
+
+    const longSnapshot: PositionSnapshot = {
+      baseAsset: 'BTC',
+      symbol: 'BTCUSDT',
+      positionAmt: 2,
+      notional: 90000,
+      leverage: 5,
+      initialMargin: 1000,
+      isolatedMargin: 0,
+      marginType: 'cross',
+      direction: 'long',
+      markPrice: 45000,
+      predictedFundingRate: 0,
+      updatedAt: Date.now(),
+      entryPrice: 45000,
+      marginAsset: 'USDT'
+    };
+
+    const shortSnapshot: PositionSnapshot = {
+      baseAsset: 'ETH',
+      symbol: 'ETHUSDT',
+      positionAmt: -3,
+      notional: 60000,
+      leverage: 4,
+      initialMargin: 800,
+      isolatedMargin: 0,
+      marginType: 'cross',
+      direction: 'short',
+      markPrice: 2000,
+      predictedFundingRate: 0,
+      updatedAt: Date.now(),
+      entryPrice: 2000,
+      marginAsset: 'USDT'
+    };
+
+    metricsSummary.positions = new Map([
+      [buildPositionKey(longSnapshot.symbol, longSnapshot.direction), longSnapshot],
+      [buildPositionKey(shortSnapshot.symbol, shortSnapshot.direction), shortSnapshot]
+    ]);
     getSummaryMock = vi.fn().mockResolvedValue(metricsSummary);
     metricsProvider = {
       getSummary: getSummaryMock
@@ -115,6 +159,8 @@ describe('OrderAggregator', () => {
     expect(notifications[0].cumulativeQuoteDisplay).toBe('45000.00 USDT');
     expect(notifications[0].cumulativeQuoteRatioDisplay).toBe('45.00%');
     expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
+    expect(notifications[0].longShortRatioDisplay).toBe('1.50:1.00');
+    expect(notifications[0].longShortRatio).toBe('1.500000:1');
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
@@ -134,6 +180,7 @@ describe('OrderAggregator', () => {
     expect(notifications[0].cumulativeQuoteDisplay).toBe('45000.00 USDT');
     expect(notifications[0].cumulativeQuoteRatioDisplay).toBe('45.00%');
     expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
+    expect(notifications[0].longShortRatioDisplay).toBe('1.50:1.00');
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
@@ -165,6 +212,7 @@ describe('OrderAggregator', () => {
     expect(notifications).toHaveLength(1);
     expect(notifications[0].tradePnl).toBe('4.00000000');
     expect(notifications[0].tradePnlDisplay).toBe('+4.00 USDT');
+    expect(notifications[0].longShortRatioDisplay).toBe('1.50:1.00');
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
@@ -184,6 +232,7 @@ describe('OrderAggregator', () => {
     expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
     expect(notifications[0].priceSource).toBe('average');
     expect(notifications[0].displayPrice).toBe('45000.00000000');
+    expect(notifications[0].longShortRatioDisplay).toBe('1.50:1.00');
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
@@ -210,6 +259,7 @@ describe('OrderAggregator', () => {
     expect(notifications[0].tradePnlDisplay).toBeUndefined();
     expect(notifications[0].priceSource).toBe('order');
     expect(notifications[0].displayPrice).toBe('43000');
+    expect(notifications[0].longShortRatioDisplay).toBeUndefined();
     expect(getSummaryMock).not.toHaveBeenCalled();
   });
 
@@ -234,6 +284,7 @@ describe('OrderAggregator', () => {
     expect(notifications[0].tradePnlDisplay).toBeUndefined();
     expect(notifications[0].priceSource).toBe('order');
     expect(notifications[0].displayPrice).toBe('43500');
+    expect(notifications[0].longShortRatioDisplay).toBeUndefined();
     expect(getSummaryMock).not.toHaveBeenCalled();
   });
 
@@ -251,6 +302,7 @@ describe('OrderAggregator', () => {
     expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
     expect(notifications[0].priceSource).toBe('average');
     expect(notifications[0].displayPrice).toBe('45000.00000000');
+    expect(notifications[0].longShortRatioDisplay).toBe('1.50:1.00');
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
@@ -261,6 +313,7 @@ describe('OrderAggregator', () => {
     expect(notifications).toHaveLength(1);
     expect(notifications[0].source).toBe('止盈');
     expect(notifications[0].title).toBe('BTCUSDT-反弹1/5减仓');
+    expect(notifications[0].longShortRatioDisplay).toBe('1.50:1.00');
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
@@ -271,6 +324,7 @@ describe('OrderAggregator', () => {
     expect(notifications).toHaveLength(1);
     expect(notifications[0].source).toBe('追踪止损');
     expect(notifications[0].title).toBe('BTCUSDT-跟踪交易止损');
+    expect(notifications[0].longShortRatioDisplay).toBe('1.50:1.00');
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
@@ -290,6 +344,7 @@ describe('OrderAggregator', () => {
     expect(notifications[0].cumulativeQuoteRatioDisplay).toBe('45.00%');
     expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
     expect(notifications[0].priceSource).toBe('average');
+    expect(notifications[0].longShortRatioDisplay).toBe('1.50:1.00');
   });
 
   it('handles SL/TP 部分成交但 10 秒内未补足', async () => {
@@ -308,6 +363,7 @@ describe('OrderAggregator', () => {
     expect(notifications[0].cumulativeQuoteRatioDisplay).toBe('18.00%');
     expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
     expect(notifications[0].priceSource).toBe('average');
+    expect(notifications[0].longShortRatioDisplay).toBe('1.50:1.00');
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
@@ -327,6 +383,7 @@ describe('OrderAggregator', () => {
     expect(notifications[0].cumulativeQuoteRatioDisplay).toBe('22.50%');
     expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
     expect(notifications[0].priceSource).toBe('average');
+    expect(notifications[0].longShortRatioDisplay).toBeUndefined();
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
 
@@ -355,7 +412,104 @@ describe('OrderAggregator', () => {
     expect(notifications[0].tradePnlDisplay).toBe('0.00 USDT');
     expect(notifications[0].priceSource).toBe('average');
     expect(notifications[0].displayPrice).toBe('45000.00000000');
+    expect(notifications[0].longShortRatioDisplay).toBeUndefined();
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits single notification after multiple partial fills before completion', async () => {
+    const partialA = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.25', l: '0.25', c: 'ORD-MULTI', p: '45000', sp: undefined });
+    const partialB = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.5', l: '0.25', c: 'ORD-MULTI', p: '45000', sp: undefined });
+    const partialC = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.75', l: '0.25', c: 'ORD-MULTI', p: '45000', sp: undefined });
+    const filled = buildEvent({ o: 'LIMIT', X: 'FILLED', z: '1', l: '0.25', c: 'ORD-MULTI', p: '45000', sp: undefined });
+
+    await aggregator.handleEvent(partialA);
+    await aggregator.handleEvent(partialB);
+    await aggregator.handleEvent(partialC);
+    await aggregator.handleEvent(filled);
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].scenario).toBe(Scenario.GENERAL_AGGREGATED);
+    expect(notifications[0].longShortRatioDisplay).toBe('1.50:1.00');
+    expect(getSummaryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('displays infinity ratio when account has no short positions', async () => {
+    const now = Date.now();
+    const longSnapshotOnly: PositionSnapshot = {
+      baseAsset: 'BTC',
+      symbol: 'BTCUSDT',
+      positionAmt: 3,
+      notional: 120000,
+      leverage: 5,
+      initialMargin: 1200,
+      isolatedMargin: 0,
+      marginType: 'cross',
+      direction: 'long',
+      markPrice: 40000,
+      predictedFundingRate: 0,
+      updatedAt: now,
+      entryPrice: 40000,
+      marginAsset: 'USDT'
+    };
+
+    metricsSummary.positions = new Map([
+      [buildPositionKey(longSnapshotOnly.symbol, longSnapshotOnly.direction), longSnapshotOnly]
+    ]);
+    getSummaryMock.mockResolvedValueOnce(metricsSummary);
+
+    const event = buildEvent({ o: 'LIMIT', X: 'FILLED', z: '1', l: '1', c: 'ORD-INF', p: '45000', sp: undefined });
+    await aggregator.handleEvent(event);
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].longShortRatioDisplay).toBe('∞:1.00');
+    expect(notifications[0].longShortRatio).toBe('Infinity:1');
+  });
+
+  it('clears timeout when fill arrives near the aggregation boundary (普通订单)', async () => {
+    const partial = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.5', l: '0.5', c: 'ORD-EDGE', p: '45000', sp: undefined });
+    const filled = buildEvent({ o: 'LIMIT', X: 'FILLED', z: '1', l: '0.5', c: 'ORD-EDGE', p: '45000', sp: undefined });
+
+    await aggregator.handleEvent(partial);
+    await vi.advanceTimersByTimeAsync(900);
+    await aggregator.handleEvent(filled);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].scenario).toBe(Scenario.GENERAL_AGGREGATED);
+    expect(notifications[0].longShortRatioDisplay).toBe('1.50:1.00');
+  });
+
+  it('clears timeout when fill arrives near the aggregation boundary (SL/TP)', async () => {
+    const partial = buildEvent({ o: 'STOP_MARKET', X: 'PARTIALLY_FILLED', z: '0.7', l: '0.7', c: 'TP-EDGE' });
+    const filled = buildEvent({ o: 'STOP_MARKET', X: 'FILLED', z: '1', l: '0.3', c: 'TP-EDGE' });
+
+    await aggregator.handleEvent(partial);
+    await vi.advanceTimersByTimeAsync(900);
+    await aggregator.handleEvent(filled);
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].scenario).toBe(Scenario.SLTP_PARTIAL_COMPLETED);
+    expect(notifications[0].longShortRatioDisplay).toBe('1.50:1.00');
+  });
+
+  it('restarts aggregation after timeout without duplicating previous notifications', async () => {
+    const partialA = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.4', l: '0.4', c: 'ORD-REARM', p: '45000', sp: undefined });
+    const partialB = buildEvent({ o: 'LIMIT', X: 'PARTIALLY_FILLED', z: '0.2', l: '0.2', c: 'ORD-REARM', p: '45000', sp: undefined });
+
+    await aggregator.handleEvent(partialA);
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.runAllTimersAsync();
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].scenario).toBe(Scenario.GENERAL_TIMEOUT);
+
+    await aggregator.handleEvent(partialB);
+    await vi.advanceTimersByTimeAsync(1000);
+    await vi.runAllTimersAsync();
+
+    expect(notifications).toHaveLength(2);
+    expect(notifications[1].scenario).toBe(Scenario.GENERAL_TIMEOUT);
   });
 
   it('ignores SL/TP 触发生成的执行单创建', async () => {

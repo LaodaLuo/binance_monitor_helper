@@ -20,7 +20,8 @@ describe('buildFeishuCard', () => {
       cumulativeQuote: '45000.00000000',
       cumulativeQuoteDisplay: '45000.00 USDT',
       cumulativeQuoteRatioDisplay: '45.00%',
-      tradePnlDisplay: '+5.00 USDT'
+      tradePnlDisplay: '+5.00 USDT',
+      longShortRatioDisplay: '1.50:1.00'
     });
 
     expect(payload.msg_type).toBe('interactive');
@@ -36,7 +37,10 @@ describe('buildFeishuCard', () => {
     const pnlField = card.elements[2].fields[1].text.content;
     expect(pnlField).toContain('该笔交易累计PnL');
     expect(pnlField).toContain('+5.00 USDT');
-    const priceText = card.elements[3].text.content;
+    const ratioText = card.elements[3].text.content;
+    expect(ratioText).toContain('多空名义比');
+    expect(ratioText).toContain('1.50:1.00');
+    const priceText = card.elements[4].text.content;
     expect(priceText).toContain('平均成交价格');
   });
 

@@ -31,6 +31,7 @@ export function buildFeishuCard(input: OrderNotificationInput): CardPayload {
   const amountDisplay = input.cumulativeQuoteDisplay ?? input.cumulativeQuote ?? '-';
   const ratioDisplay = input.cumulativeQuoteRatioDisplay ?? input.cumulativeQuoteRatio ?? '-';
   const pnlDisplay = input.tradePnlDisplay ?? input.tradePnl ?? '-';
+  const positionRatioDisplay = input.longShortRatioDisplay ?? input.longShortRatio ?? null;
 
   const elements: Record<string, unknown>[] = [];
 
@@ -81,6 +82,16 @@ export function buildFeishuCard(input: OrderNotificationInput): CardPayload {
       }
     ]
   });
+
+  if (positionRatioDisplay) {
+    elements.push({
+      tag: 'div',
+      text: {
+        tag: 'lark_md',
+        content: `**多空名义比:** ${positionRatioDisplay}`
+      }
+    });
+  }
 
   const priceLabel = input.priceSource === 'average' ? '平均成交价格' : '价格';
 

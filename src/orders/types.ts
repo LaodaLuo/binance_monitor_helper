@@ -111,6 +111,8 @@ export interface OrderNotificationInput {
   cumulativeQuoteRatioDisplay?: string;
   tradePnl?: string;
   tradePnlDisplay?: string;
+  longShortRatio?: string;
+  longShortRatioDisplay?: string;
 }
 
 export const Scenario = {
