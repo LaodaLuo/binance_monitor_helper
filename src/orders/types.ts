@@ -29,6 +29,7 @@ export interface RawOrderTradeUpdate {
   o: {
     s: string;
     c: string;
+    C?: string;
     S: OrderSide;
     o: OrderType;
     x: string;
@@ -53,6 +54,7 @@ export interface OrderEvent {
   symbol: string;
   orderId: number;
   clientOrderId: string;
+  originalClientOrderId?: string;
   side: OrderSide;
   orderType: OrderType;
   status: OrderStatus;

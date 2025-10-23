@@ -11,6 +11,7 @@ import {
   type AggregationContext,
   type OrderEvent,
   type OrderNotificationInput,
+  type OrderPresentation,
   type ScenarioKey
 } from './types.js';
 
@@ -25,6 +26,7 @@ export class OrderAggregator {
   private readonly aggregationWindowMs: number;
   private readonly tracker = new OrderStateTracker();
   private readonly metricsProvider: AccountMetricsProvider;
+  private readonly stopPresentationCache = new Map<string, OrderPresentation>();
   private notificationHandler?: NotificationHandler;
 
   constructor(options: AggregatorOptions = {}) {
@@ -41,7 +43,7 @@ export class OrderAggregator {
       throw new Error('Notification handler not registered');
     }
 
-    const presentation = resolveOrderPresentation(event.clientOrderId);
+    const presentation = this.resolvePresentation(event);
     const source = presentation.source;
 
     if (source === '其他' && event.status === 'NEW') {
@@ -394,10 +396,33 @@ export class OrderAggregator {
     }
   }
 
+  private resolvePresentation(event: OrderEvent): OrderPresentation {
+    const direct = resolveOrderPresentation(event.clientOrderId);
+
+    if (direct.source !== '其他') {
+      this.stopPresentationCache.set(event.clientOrderId, direct);
+      return direct;
+    }
+
+    if (event.originalClientOrderId) {
+      const cached = this.stopPresentationCache.get(event.originalClientOrderId);
+      if (cached) {
+        this.stopPresentationCache.set(event.clientOrderId, cached);
+        return cached;
+      }
+    }
+
+    return direct;
+  }
+
   private clearContext(event: OrderEvent): void {
     const key = aggregationKey(event);
     logger.debug({ key }, 'Clearing aggregation context');
     this.tracker.delete(event);
+    this.stopPresentationCache.delete(event.clientOrderId);
+    if (event.originalClientOrderId) {
+      this.stopPresentationCache.delete(event.originalClientOrderId);
+    }
   }
 }
 

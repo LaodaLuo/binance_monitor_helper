@@ -8,6 +8,7 @@ const rawOrderTradeUpdateSchema = z.object({
   o: z.object({
     s: z.string(),
     c: z.string(),
+    C: z.string().optional(),
     S: z.enum(['BUY', 'SELL']),
     o: z.string(),
     x: z.string(),
@@ -44,6 +45,7 @@ export function toOrderEvent(raw: RawOrderTradeUpdate): OrderEvent {
     symbol: raw.o.s,
     orderId: raw.o.i,
     clientOrderId: raw.o.c,
+    originalClientOrderId: raw.o.C,
     side: raw.o.S as OrderEvent['side'],
     orderType: raw.o.o as OrderType,
     status: raw.o.X as OrderStatus,

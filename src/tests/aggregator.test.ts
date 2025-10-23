@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AccountMetricsProvider, AccountSummary } from '../orders/accountMetricsProvider.js';
+import type { RawOrderTradeUpdate } from '../orders/types.js';
 
 type AggregatorModule = typeof import('../orders/aggregator.js');
 type TypesModule = typeof import('../orders/types.js');
@@ -12,8 +13,8 @@ let metricsProvider: AccountMetricsProvider;
 let metricsSummary: AccountSummary;
 let getSummaryMock: ReturnType<typeof vi.fn>;
 
-const BASE_EVENT = {
-  e: 'ORDER_TRADE_UPDATE' as const,
+const BASE_EVENT: RawOrderTradeUpdate = {
+  e: 'ORDER_TRADE_UPDATE',
   E: Date.now(),
   T: Date.now(),
   o: {
@@ -37,7 +38,7 @@ const BASE_EVENT = {
   }
 };
 
-function buildEvent(overrides: Partial<typeof BASE_EVENT['o']>, extra?: Partial<typeof BASE_EVENT>) {
+function buildEvent(overrides: Partial<RawOrderTradeUpdate['o']>, extra?: Partial<RawOrderTradeUpdate>) {
   const raw = {
     ...BASE_EVENT,
     ...extra,
@@ -358,9 +359,33 @@ describe('OrderAggregator', () => {
   });
 
   it('ignores SL/TP 触发生成的执行单创建', async () => {
-    const triggerNew = buildEvent({ o: 'MARKET', X: 'NEW', x: 'NEW', l: '0', z: '0', c: 'TP-TRIG', sp: undefined, p: '0' });
-    await aggregator.handleEvent(triggerNew);
-    expect(notifications).toHaveLength(0);
+    const stopCreation = buildEvent({
+      o: 'STOP_MARKET',
+      X: 'NEW',
+      x: 'NEW',
+      z: '0',
+      l: '0',
+      c: 'TP-TRIG',
+      sp: '43000',
+      p: '0'
+    });
+    await aggregator.handleEvent(stopCreation);
+    expect(notifications).toHaveLength(1);
+
+    const triggeredNew = buildEvent({
+      o: 'MARKET',
+      X: 'NEW',
+      x: 'NEW',
+      z: '0',
+      l: '0',
+      c: 'EXEC-123',
+      C: 'TP-TRIG',
+      sp: undefined,
+      p: '0'
+    });
+    await aggregator.handleEvent(triggeredNew);
+
+    expect(notifications).toHaveLength(1);
     expect(getSummaryMock).not.toHaveBeenCalled();
   });
 });
