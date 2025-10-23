@@ -31,7 +31,15 @@ export class FeishuNotifier {
           }
           throw new Error(`Unexpected status ${response.status}: ${JSON.stringify(response.data)}`);
         } catch (error) {
-          logger.warn({ attempt, error }, 'Feishu notification attempt failed');
+          const err = error as any;
+          logger.warn(
+            {
+              attempt,
+              error: err,
+              response: err?.response?.data
+            },
+            'Feishu notification attempt failed'
+          );
           throw error;
         }
       },
