@@ -27,6 +27,7 @@ interface AggregatorOptions {
 }
 
 const PROCESSED_EVENT_TTL_MS = 60_000;
+const FINALIZED_CONTEXT_TTL_MS = 60_000;
 
 export class OrderAggregator {
   private readonly aggregationWindowMs: number;
@@ -35,6 +36,7 @@ export class OrderAggregator {
   private readonly stopPresentationCache = new Map<string, OrderPresentation>();
   private readonly suppressedStopClientIds = new Set<string>();
   private readonly processedEvents = new Map<string, number>();
+  private readonly finalizedContexts = new Map<string, number>();
   private notificationHandler?: NotificationHandler;
 
   constructor(options: AggregatorOptions = {}) {
@@ -65,6 +67,16 @@ export class OrderAggregator {
 
     if (source === '其他' && event.status === 'NEW') {
       logger.debug({ event }, 'Ignoring NEW status for general order');
+      this.markEventProcessed(dedupeKey, event.eventTime.getTime());
+      return;
+    }
+
+    const contextKey = aggregationKey(event);
+    if (this.isFinalStatus(event.status) && this.hasFinalizedContext(contextKey)) {
+      logger.debug(
+        { clientOrderId: event.clientOrderId, orderId: event.orderId },
+        'Skipping final event because aggregation context already finalized'
+      );
       this.markEventProcessed(dedupeKey, event.eventTime.getTime());
       return;
     }
@@ -520,6 +532,9 @@ export class OrderAggregator {
     if (event.originalClientOrderId) {
       this.stopPresentationCache.delete(event.originalClientOrderId);
     }
+    if (this.isFinalStatus(event.status)) {
+      this.markContextFinalized(aggregationKey(event), event.eventTime.getTime());
+    }
   }
 
   private buildEventKey(event: OrderEvent): string {
@@ -565,6 +580,38 @@ export class OrderAggregator {
         this.processedEvents.delete(key);
       }
     }
+  }
+
+  private hasFinalizedContext(key: string): boolean {
+    const timestamp = this.finalizedContexts.get(key);
+    if (timestamp === undefined) {
+      return false;
+    }
+    if (Date.now() - timestamp > FINALIZED_CONTEXT_TTL_MS) {
+      this.finalizedContexts.delete(key);
+      return false;
+    }
+    return true;
+  }
+
+  private markContextFinalized(key: string, timestamp: number): void {
+    this.finalizedContexts.set(key, timestamp);
+    this.pruneFinalizedContexts();
+  }
+
+  private pruneFinalizedContexts(): void {
+    if (this.finalizedContexts.size === 0) return;
+    const threshold = Date.now() - FINALIZED_CONTEXT_TTL_MS;
+    for (const [key, ts] of this.finalizedContexts.entries()) {
+      if (ts < threshold) {
+        this.finalizedContexts.delete(key);
+      }
+    }
+  }
+
+  private isFinalStatus(status: string): boolean {
+    const normalized = typeof status === 'string' ? status.toUpperCase() : '';
+    return normalized === 'FILLED' || normalized === 'CANCELED' || normalized === 'EXPIRED' || normalized === 'REJECTED';
   }
 }
 
