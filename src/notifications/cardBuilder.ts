@@ -1,5 +1,5 @@
-import dayjs from 'dayjs';
 import type { OrderNotificationInput } from '../orders/types.js';
+import { formatDisplayTime } from '../utils/time.js';
 
 const TEMPLATE_COLOR_MAP: Record<string, string> = {
   创建: 'blue',
@@ -107,7 +107,7 @@ export function buildFeishuCard(input: OrderNotificationInput): CardPayload {
     tag: 'div',
     text: {
       tag: 'lark_md',
-      content: `**通知时间:** ${dayjs(input.notifyTime).format('YYYY-MM-DD HH:mm:ss')}`
+      content: `**通知时间:** ${formatDisplayTime(input.notifyTime)}`
     }
   });
 

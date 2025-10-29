@@ -1,6 +1,6 @@
-import dayjs from 'dayjs';
 import type { ValidationSeverity } from '../positions/types.js';
 import type { CardPayload } from './cardBuilder.js';
+import { formatDisplayTime } from '../utils/time.js';
 
 const SEVERITY_TEMPLATE: Record<ValidationSeverity, string> = {
   critical: 'red',
@@ -101,7 +101,7 @@ export function buildPositionAlertCard(input: PositionAlertCardInput): CardPaylo
     tag: 'div',
     text: {
       tag: 'lark_md',
-      content: `**首次发现:** ${dayjs(input.firstDetectedAt).format('YYYY-MM-DD HH:mm:ss')}`
+      content: `**首次发现:** ${formatDisplayTime(input.firstDetectedAt)}`
     }
   });
 
@@ -109,7 +109,7 @@ export function buildPositionAlertCard(input: PositionAlertCardInput): CardPaylo
     tag: 'div',
     text: {
       tag: 'lark_md',
-      content: `**最新检测:** ${dayjs(input.triggeredAt).format('YYYY-MM-DD HH:mm:ss')}`
+      content: `**最新检测:** ${formatDisplayTime(input.triggeredAt)}`
     }
   });
 
