@@ -107,7 +107,7 @@ export function buildFeishuCard(input: OrderNotificationInput): CardPayload {
     tag: 'div',
     text: {
       tag: 'lark_md',
-      content: `**通知时间:** ${formatDisplayTime(input.notifyTime)}`
+      content: `**通知时间:** ${formatDisplayTime(input.notifyTime, undefined, true)}`
     }
   });
 

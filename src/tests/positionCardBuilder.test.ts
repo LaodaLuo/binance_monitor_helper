@@ -18,11 +18,11 @@ describe('buildPositionAlertCard', () => {
     const card = cardPayload.card as any;
     const firstDetected = card.elements[3].text.content;
     expect(firstDetected).toContain('首次发现');
-    expect(firstDetected).toContain('2024-05-01 08:00:00');
+    expect(firstDetected).toContain('2024-05-01 08:00:00 (UTC+8)');
 
     const latestDetected = card.elements[4].text.content;
     expect(latestDetected).toContain('最新检测');
-    expect(latestDetected).toContain('2024-05-01 12:30:00');
+    expect(latestDetected).toContain('2024-05-01 12:30:00 (UTC+8)');
   });
 });
 
@@ -64,7 +64,7 @@ describe('buildPositionAlertDigestCard', () => {
 
     const summary = card.elements[0].text.content as string;
     expect(summary).toContain('**事件数量:** 2');
-    expect(summary).toContain('2024-05-01 12:30:00');
+    expect(summary).toContain('2024-05-01 12:30:00 (UTC+8)');
 
     const firstDetail = card.elements[1].text.content as string;
     expect(firstDetail).toContain('1. 规则A - 账户');

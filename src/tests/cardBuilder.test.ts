@@ -44,7 +44,7 @@ describe('buildFeishuCard', () => {
     expect(priceText).toContain('平均成交价格');
     const notifyText = card.elements[5].text.content;
     expect(notifyText).toContain('通知时间');
-    expect(notifyText).toContain('2024-01-01 08:00:00');
+    expect(notifyText).toContain('2024-01-01 08:00:00 (UTC+8)');
   });
 
   it('builds card for 创建场景 with 挂单价格 label', () => {
@@ -79,6 +79,6 @@ describe('buildFeishuCard', () => {
     expect(priceText).not.toContain('平均');
     const notifyText = card.elements[4].text.content;
     expect(notifyText).toContain('通知时间');
-    expect(notifyText).toContain('2024-01-01 08:00:00');
+    expect(notifyText).toContain('2024-01-01 08:00:00 (UTC+8)');
   });
 });

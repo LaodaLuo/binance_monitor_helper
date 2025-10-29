@@ -9,8 +9,9 @@ dayjs.extend(timezone);
 const DISPLAY_TIMEZONE = 'Asia/Shanghai';
 const DEFAULT_FORMAT = 'YYYY-MM-DD HH:mm:ss';
 
-export function formatDisplayTime(value: ConfigType, format = DEFAULT_FORMAT): string {
-  return dayjs(value).tz(DISPLAY_TIMEZONE).format(format);
+export function formatDisplayTime(value: ConfigType, format = DEFAULT_FORMAT, withTimezone = false): string {
+  const formatted = dayjs(value).tz(DISPLAY_TIMEZONE).format(format);
+  return withTimezone ? `${formatted} (UTC+8)` : formatted;
 }
 
 export { DISPLAY_TIMEZONE, DEFAULT_FORMAT };

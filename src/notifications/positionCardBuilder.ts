@@ -138,7 +138,7 @@ export function buildPositionAlertCard(input: PositionAlertCardInput): CardPaylo
     tag: 'div',
     text: {
       tag: 'lark_md',
-      content: `**首次发现:** ${formatDisplayTime(input.firstDetectedAt)}`
+      content: `**首次发现:** ${formatDisplayTime(input.firstDetectedAt, undefined, true)}`
     }
   });
 
@@ -146,7 +146,7 @@ export function buildPositionAlertCard(input: PositionAlertCardInput): CardPaylo
     tag: 'div',
     text: {
       tag: 'lark_md',
-      content: `**最新检测:** ${formatDisplayTime(input.triggeredAt)}`
+      content: `**最新检测:** ${formatDisplayTime(input.triggeredAt, undefined, true)}`
     }
   });
 
@@ -176,7 +176,7 @@ export function buildPositionAlertDigestCard(input: PositionAlertDigestCardInput
     tag: 'div',
     text: {
       tag: 'lark_md',
-      content: `**本轮检测:** ${formatDisplayTime(input.triggeredAt)}\n**事件数量:** ${input.events.length}`
+      content: `**本轮检测:** ${formatDisplayTime(input.triggeredAt, undefined, true)}\n**事件数量:** ${input.events.length}`
     }
   });
 
@@ -201,8 +201,8 @@ export function buildPositionAlertDigestCard(input: PositionAlertDigestCardInput
       }
     }
 
-    detailLines.push(`首次发现: ${formatDisplayTime(event.firstDetectedAt)}`);
-    detailLines.push(`最新检测: ${formatDisplayTime(event.triggeredAt)}`);
+    detailLines.push(`首次发现: ${formatDisplayTime(event.firstDetectedAt, undefined, true)}`);
+    detailLines.push(`最新检测: ${formatDisplayTime(event.triggeredAt, undefined, true)}`);
 
     elements.push({
       tag: 'div',
