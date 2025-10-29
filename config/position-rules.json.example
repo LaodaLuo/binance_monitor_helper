@@ -32,6 +32,14 @@
     "DOGE": {
       "blacklistLong": ["DOGE"],
       "blacklistShort": ["DOGE"]
+    },
+    "BLUR": {
+      "whitelistShort": ["BLUR"],
+      "blacklistLong": ["BLUR"],
+      "maxMarginShare": 0.1,
+      "fundingThresholdShort": -0.0008,
+      "minFundingRateDelta": 0.0002,
+      "notifyRecovery": true
     }
   }
 }

@@ -9,8 +9,6 @@ import { FeishuNotifier } from '../notifications/notifier.js';
 import { logger } from '../utils/logger.js';
 import { SymbolMetricsFetcher } from './marketDataFetcher.js';
 
-const POSITION_ALERT_WEBHOOK = 'https://open.feishu.cn/open-apis/bot/v2/hook/ed82732d-cd38-41f3-bb50-c2d9cfd081a4';
-
 interface PositionValidationServiceOptions {
   fetcher?: BinanceAccountFetcher;
   ruleEngine?: PositionRuleEngine;
@@ -120,7 +118,8 @@ export class PositionValidationService {
     this.fetcher = options?.fetcher ?? new BinanceAccountFetcher();
     this.ruleEngine = options?.ruleEngine ?? new PositionRuleEngine();
     this.alertLimiter = options?.alertLimiter ?? new AlertLimiter({ minCooldownMinutes: MIN_ALERT_COOLDOWN_MINUTES });
-    this.notifier = options?.notifier ?? new FeishuNotifier({ webhookUrl: POSITION_ALERT_WEBHOOK });
+    this.notifier =
+      options?.notifier ?? new FeishuNotifier({ webhookUrl: appConfig.positionAlertWebhookUrl });
     this.intervalMs = options?.intervalMs ?? appConfig.positionValidationIntervalMs;
     this.metricsFetcher = options?.metricsFetcher ?? new SymbolMetricsFetcher();
   }

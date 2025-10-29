@@ -23,6 +23,7 @@ const configSchema = z.object({
     .string()
     .url('FEISHU_SECONDARY_WEBHOOK_URL must be a valid URL')
     .default('https://open.feishu.cn/open-apis/bot/v2/hook/2b097171-60ad-476e-ae90-a78e301bb791'),
+  POSITION_ALERT_WEBHOOK_URL: z.string().url('POSITION_ALERT_WEBHOOK_URL must be a valid URL'),
   AGGREGATION_WINDOW_MS: z
     .string()
     .transform((val) => Number(val))
@@ -64,6 +65,7 @@ export interface AppConfig {
   binanceWsBaseUrl: string;
   feishuWebhookUrl: string;
   feishuSecondaryWebhookUrl: string;
+  positionAlertWebhookUrl: string;
   aggregationWindowMs: number;
   listenKeyKeepAliveMs: number;
   logLevel: string;
@@ -78,6 +80,7 @@ export const appConfig: AppConfig = {
   binanceWsBaseUrl: rawConfig.BINANCE_WS_BASE_URL,
   feishuWebhookUrl: rawConfig.FEISHU_WEBHOOK_URL,
   feishuSecondaryWebhookUrl: rawConfig.FEISHU_SECONDARY_WEBHOOK_URL,
+  positionAlertWebhookUrl: rawConfig.POSITION_ALERT_WEBHOOK_URL,
   aggregationWindowMs: Number(rawConfig.AGGREGATION_WINDOW_MS) || 10000,
   listenKeyKeepAliveMs: Number(rawConfig.LISTEN_KEY_KEEP_ALIVE_MS) || 25 * 60 * 1000,
   logLevel: rawConfig.LOG_LEVEL,
