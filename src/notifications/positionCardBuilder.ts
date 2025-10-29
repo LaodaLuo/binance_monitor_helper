@@ -22,11 +22,48 @@ export interface PositionAlertCardInput {
   repeat: boolean;
 }
 
+export interface PositionAlertDigestEvent {
+  title: string;
+  scopeLabel: string;
+  statusLabel: string;
+  severity: ValidationSeverity;
+  ruleLabel: string;
+  message: string;
+  valueLabel?: string;
+  thresholdLabel?: string;
+  extraFields?: Array<{ label: string; value: string }>;
+  repeat: boolean;
+  firstDetectedAt: number;
+  triggeredAt: number;
+}
+
+export interface PositionAlertDigestCardInput {
+  triggeredAt: number;
+  events: PositionAlertDigestEvent[];
+}
+
 function resolveTemplate(severity: ValidationSeverity, statusLabel: string): string {
   if (statusLabel.includes('恢复')) {
     return 'green';
   }
   return SEVERITY_TEMPLATE[severity] ?? 'blue';
+}
+
+function resolveDigestTemplate(events: PositionAlertDigestEvent[]): string {
+  if (events.length === 0) {
+    return 'blue';
+  }
+  const hasAlert = events.some((event) => !event.statusLabel.includes('恢复'));
+  if (!hasAlert) {
+    return 'green';
+  }
+  if (events.some((event) => event.severity === 'critical' && !event.statusLabel.includes('恢复'))) {
+    return 'red';
+  }
+  if (events.some((event) => event.severity === 'warning' && !event.statusLabel.includes('恢复'))) {
+    return 'orange';
+  }
+  return 'blue';
 }
 
 export function buildPositionAlertCard(input: PositionAlertCardInput): CardPayload {
@@ -125,6 +162,75 @@ export function buildPositionAlertCard(input: PositionAlertCardInput): CardPaylo
         title: {
           tag: 'plain_text',
           content: input.title
+        }
+      },
+      elements
+    }
+  };
+}
+
+export function buildPositionAlertDigestCard(input: PositionAlertDigestCardInput): CardPayload {
+  const elements: Record<string, unknown>[] = [];
+
+  elements.push({
+    tag: 'div',
+    text: {
+      tag: 'lark_md',
+      content: `**本轮检测:** ${formatDisplayTime(input.triggeredAt)}\n**事件数量:** ${input.events.length}`
+    }
+  });
+
+  input.events.forEach((event, index) => {
+    const detailLines: string[] = [
+      `**${index + 1}. ${event.title}**`,
+      `状态: ${event.statusLabel}${event.repeat ? '（持续）' : ''}`,
+      `说明: ${event.message}`
+    ];
+
+    if (event.valueLabel) {
+      detailLines.push(`当前值: ${event.valueLabel}`);
+    }
+
+    if (event.thresholdLabel) {
+      detailLines.push(`阈值: ${event.thresholdLabel}`);
+    }
+
+    if (event.extraFields) {
+      for (const extra of event.extraFields) {
+        detailLines.push(`${extra.label}: ${extra.value}`);
+      }
+    }
+
+    detailLines.push(`首次发现: ${formatDisplayTime(event.firstDetectedAt)}`);
+    detailLines.push(`最新检测: ${formatDisplayTime(event.triggeredAt)}`);
+
+    elements.push({
+      tag: 'div',
+      text: {
+        tag: 'lark_md',
+        content: detailLines.join('\n')
+      }
+    });
+
+    if (index < input.events.length - 1) {
+      elements.push({ tag: 'hr' });
+    }
+  });
+
+  const headerTitle = `持仓监控 - ${input.events.length} 条提醒`;
+
+  return {
+    msg_type: 'interactive',
+    card: {
+      config: {
+        wide_screen_mode: true,
+        enable_forward: true
+      },
+      header: {
+        template: resolveDigestTemplate(input.events),
+        title: {
+          tag: 'plain_text',
+          content: headerTitle
         }
       },
       elements

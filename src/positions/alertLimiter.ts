@@ -4,10 +4,29 @@ function defaultIssueKey(issue: ValidationIssue): string {
   return `${issue.rule}:${issue.baseAsset}:${issue.direction}`;
 }
 
+export interface AlertLimiterOptions {
+  keyFn?: (issue: ValidationIssue) => string;
+  minCooldownMinutes?: number;
+}
+
 export class AlertLimiter {
   private readonly states = new Map<string, AlertState>();
+  private readonly keyFn: (issue: ValidationIssue) => string;
+  private readonly minCooldownMs: number;
 
-  constructor(private readonly keyFn: (issue: ValidationIssue) => string = defaultIssueKey) {}
+  constructor();
+  constructor(keyFn: (issue: ValidationIssue) => string);
+  constructor(options: AlertLimiterOptions);
+  constructor(arg?: ((issue: ValidationIssue) => string) | AlertLimiterOptions) {
+    if (typeof arg === 'function') {
+      this.keyFn = arg;
+      this.minCooldownMs = 0;
+    } else {
+      this.keyFn = arg?.keyFn ?? defaultIssueKey;
+      const minCooldownMinutes = Math.max(0, arg?.minCooldownMinutes ?? 0);
+      this.minCooldownMs = minCooldownMinutes * 60 * 1000;
+    }
+  }
 
   process(issues: ValidationIssue[], timestamp: number): AlertEvent[] {
     const events: AlertEvent[] = [];
@@ -38,7 +57,8 @@ export class AlertLimiter {
       state.lastIssue = issue;
       state.notifyOnRecovery = issue.notifyOnRecovery;
 
-      const cooldownMs = Math.max(0, issue.cooldownMinutes) * 60 * 1000;
+      const issueCooldownMs = Math.max(0, issue.cooldownMinutes) * 60 * 1000;
+      const cooldownMs = Math.max(issueCooldownMs, this.minCooldownMs);
       if (state.lastSentAt === null || timestamp - state.lastSentAt >= cooldownMs) {
         events.push({
           type: 'alert',

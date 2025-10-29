@@ -33,4 +33,22 @@ describe('AlertLimiter', () => {
     expect(recoveryBatch).toHaveLength(1);
     expect(recoveryBatch[0]).toMatchObject({ type: 'recovery' });
   });
+
+  it('enforces minimum cooldown when configured', () => {
+    const limiter = new AlertLimiter({ minCooldownMinutes: 60 });
+    const issue: ValidationIssue = {
+      ...baseIssue,
+      cooldownMinutes: 0
+    };
+
+    const firstBatch = limiter.process([issue], 0);
+    expect(firstBatch).toHaveLength(1);
+
+    const thirtyMinutesLater = limiter.process([issue], 30 * 60 * 1000);
+    expect(thirtyMinutesLater).toHaveLength(0);
+
+    const afterOneHour = limiter.process([issue], 61 * 60 * 1000);
+    expect(afterOneHour).toHaveLength(1);
+    expect(afterOneHour[0]).toMatchObject({ repeat: true });
+  });
 });

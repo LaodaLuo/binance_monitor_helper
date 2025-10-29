@@ -3,7 +3,8 @@ import { BinanceAccountFetcher } from './accountFetcher.js';
 import { PositionRuleEngine } from './ruleEngine.js';
 import { AlertLimiter } from './alertLimiter.js';
 import type { AlertEvent, ValidationIssue } from './types.js';
-import { buildPositionAlertCard } from '../notifications/positionCardBuilder.js';
+import { buildPositionAlertDigestCard } from '../notifications/positionCardBuilder.js';
+import type { PositionAlertDigestEvent } from '../notifications/positionCardBuilder.js';
 import { FeishuNotifier } from '../notifications/notifier.js';
 import { logger } from '../utils/logger.js';
 import { SymbolMetricsFetcher } from './marketDataFetcher.js';
@@ -18,6 +19,8 @@ interface PositionValidationServiceOptions {
   intervalMs?: number;
   metricsFetcher?: SymbolMetricsFetcher;
 }
+
+const MIN_ALERT_COOLDOWN_MINUTES = 60;
 
 const RULE_LABEL_MAP: Record<ValidationIssue['rule'], string> = {
   whitelist_violation: '白名单限制',
@@ -116,7 +119,7 @@ export class PositionValidationService {
   constructor(options?: PositionValidationServiceOptions) {
     this.fetcher = options?.fetcher ?? new BinanceAccountFetcher();
     this.ruleEngine = options?.ruleEngine ?? new PositionRuleEngine();
-    this.alertLimiter = options?.alertLimiter ?? new AlertLimiter();
+    this.alertLimiter = options?.alertLimiter ?? new AlertLimiter({ minCooldownMinutes: MIN_ALERT_COOLDOWN_MINUTES });
     this.notifier = options?.notifier ?? new FeishuNotifier({ webhookUrl: POSITION_ALERT_WEBHOOK });
     this.intervalMs = options?.intervalMs ?? appConfig.positionValidationIntervalMs;
     this.metricsFetcher = options?.metricsFetcher ?? new SymbolMetricsFetcher();
@@ -145,9 +148,9 @@ export class PositionValidationService {
         return;
       }
 
-      for (const event of events) {
-        await this.dispatchEvent(event, context.fetchedAt);
-      }
+      const digestCard = this.buildDigestCard(events, context.fetchedAt);
+      await this.notifier.send(digestCard);
+      logger.info({ eventCount: events.length }, 'Position validation digest sent');
     } catch (error) {
       logger.error({ error }, 'Position validation run failed');
     } finally {
@@ -156,7 +159,15 @@ export class PositionValidationService {
     }
   }
 
-  private async dispatchEvent(event: AlertEvent, triggeredAt: number): Promise<void> {
+  private buildDigestCard(events: AlertEvent[], triggeredAt: number) {
+    const digestEvents = events.map((event) => this.buildDigestEvent(event, triggeredAt));
+    return buildPositionAlertDigestCard({
+      triggeredAt,
+      events: digestEvents
+    });
+  }
+
+  private buildDigestEvent(event: AlertEvent, triggeredAt: number): PositionAlertDigestEvent {
     const issue = event.issue;
     const statusLabel = event.type === 'recovery' ? '恢复' : '告警';
     const ruleLabel = RULE_LABEL_MAP[issue.rule] ?? issue.rule;
@@ -182,11 +193,10 @@ export class PositionValidationService {
 
     const message =
       event.type === 'recovery' ? `${ruleLabel} 告警已恢复，当前状态符合配置` : issue.message;
-
     const scopeLabel = resolveScope(issue);
     const title = `${ruleLabel} - ${scopeLabel}`;
 
-    const card = buildPositionAlertCard({
+    return {
       title,
       scopeLabel,
       statusLabel,
@@ -199,8 +209,6 @@ export class PositionValidationService {
       firstDetectedAt: event.firstDetectedAt,
       triggeredAt,
       repeat: event.repeat
-    });
-
-    await this.notifier.send(card);
+    };
   }
 }
