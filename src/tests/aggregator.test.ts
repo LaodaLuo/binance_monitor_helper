@@ -312,7 +312,7 @@ describe('OrderAggregator', () => {
 
     expect(notifications).toHaveLength(1);
     expect(notifications[0].source).toBe('止盈');
-    expect(notifications[0].title).toBe('BTCUSDT-反弹1/5减仓');
+    expect(notifications[0].title).toBe('BTCUSDT-反弹1/4减仓30%');
     expect(notifications[0].longShortRatioDisplay).toBe('1.50:1.00');
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
   });
@@ -549,7 +549,7 @@ describe('OrderAggregator', () => {
 
     await aggregator.handleEvent(executionFill);
     expect(notifications).toHaveLength(2);
-    expect(notifications[1].title).toBe('BTCUSDT-反弹1/2清仓');
+    expect(notifications[1].title).toBe('BTCUSDT-反弹1/2减仓40%');
     expect(getSummaryMock).toHaveBeenCalledTimes(1);
 
     const parentFill = buildEvent({

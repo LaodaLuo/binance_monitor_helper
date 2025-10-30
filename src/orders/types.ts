@@ -161,7 +161,7 @@ export function resolveOrderPresentation(clientOrderId: string): OrderPresentati
     return {
       source: '止盈',
       classification: 'TP1',
-      titleSuffix: '反弹1/5减仓'
+      titleSuffix: '反弹1/4减仓30%'
     };
   }
 
@@ -169,7 +169,7 @@ export function resolveOrderPresentation(clientOrderId: string): OrderPresentati
     return {
       source: '止盈',
       classification: 'TP2',
-      titleSuffix: '反弹1/2清仓'
+      titleSuffix: '反弹1/2减仓40%'
     };
   }
 
