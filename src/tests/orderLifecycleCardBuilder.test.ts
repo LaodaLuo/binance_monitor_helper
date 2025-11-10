@@ -49,6 +49,28 @@ describe('buildOrderLifecycleCard', () => {
     expect(reasonElement.text.content).toContain('过期原因');
     expect(reasonElement.text.content).toContain('EXPIRED_IN_MATCH');
   });
+
+  it('跟踪止损订单优先展示激活价格', () => {
+    const event = createOrderEvent({
+      clientOrderId: 'FT_move',
+      orderType: 'TRAILING_STOP_MARKET',
+      activationPrice: '65500',
+      stopPrice: '0',
+      orderPrice: '0',
+      raw: createRaw({
+        c: 'FT_move',
+        o: 'TRAILING_STOP_MARKET',
+        AP: '65500',
+        sp: '0',
+        p: '0'
+      })
+    });
+
+    const card = buildOrderLifecycleCard(event, 'NEW');
+    const cardBody = card.card as any;
+    const priceFields = cardBody.elements[2].fields as any[];
+    expect(priceFields[0].text.content).toContain('65500');
+  });
 });
 
 function createOrderEvent(overrides: Partial<OrderEvent> = {}): OrderEvent {
@@ -69,6 +91,8 @@ function createOrderEvent(overrides: Partial<OrderEvent> = {}): OrderEvent {
     lastPrice: '0',
     orderPrice: '65000',
     stopPrice: '64000',
+    activationPrice: overrides.activationPrice,
+    callbackRate: undefined,
     isMaker: false,
     raw: createRaw(),
     ...overrides
@@ -92,6 +116,8 @@ function createRaw(overrides: Partial<RawOrderTradeUpdate['o']> = {}): RawOrderT
     L: '0',
     p: '65000',
     sp: '64000',
+    AP: overrides.AP,
+    cr: overrides.cr,
     rp: '0',
     b: '0',
     a: '0',

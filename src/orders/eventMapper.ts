@@ -21,6 +21,8 @@ const rawOrderTradeUpdateSchema = z.object({
     L: z.string(),
     p: z.string(),
     sp: z.string().optional(),
+    AP: z.string().optional(),
+    cr: z.string().optional(),
     rp: z.string().optional(),
     b: z.string().optional(),
     a: z.string().optional(),
@@ -58,6 +60,8 @@ export function toOrderEvent(raw: RawOrderTradeUpdate): OrderEvent {
     lastPrice: raw.o.L,
     orderPrice: raw.o.p,
     stopPrice: raw.o.sp,
+    activationPrice: raw.o.AP,
+    callbackRate: raw.o.cr,
     isMaker: raw.o.m,
     raw
   };

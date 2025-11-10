@@ -115,18 +115,37 @@ function resolveLifecycleTypeLabel(status: LifecycleStatus): string {
 }
 
 function resolveLifecyclePrice(event: OrderEvent): string {
-  const priceCandidates: Array<string | undefined> = [];
-  const normalizedType = event.orderType?.toUpperCase() ?? '';
+  const normalizedType = (event.orderType ?? '').toUpperCase();
+  const candidates = buildPriceCandidates(normalizedType, event);
+  return formatDecimalFromCandidates(candidates);
+}
 
-  if (normalizedType.includes('MARKET')) {
-    priceCandidates.push(event.averagePrice, event.lastPrice);
-  } else if (normalizedType.includes('STOP') || normalizedType.includes('PROFIT')) {
-    priceCandidates.push(event.stopPrice, event.orderPrice, event.averagePrice);
-  } else {
-    priceCandidates.push(event.orderPrice, event.stopPrice, event.averagePrice);
+function buildPriceCandidates(normalizedType: string, event: OrderEvent): Array<string | undefined> {
+  if (normalizedType.includes('TRAILING_STOP')) {
+    return [
+      event.activationPrice,
+      event.stopPrice,
+      event.orderPrice,
+      event.lastPrice,
+      event.averagePrice
+    ];
   }
 
-  return formatDecimalFromCandidates(priceCandidates);
+  if (normalizedType.includes('STOP') || normalizedType.includes('PROFIT')) {
+    return [
+      event.stopPrice,
+      event.orderPrice,
+      event.activationPrice,
+      event.averagePrice,
+      event.lastPrice
+    ];
+  }
+
+  if (normalizedType.includes('MARKET')) {
+    return [event.averagePrice, event.lastPrice, event.orderPrice];
+  }
+
+  return [event.orderPrice, event.stopPrice, event.activationPrice, event.averagePrice, event.lastPrice];
 }
 
 function formatDecimalFromCandidates(candidates: Array<string | undefined>): string {

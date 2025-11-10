@@ -42,6 +42,8 @@ export interface RawOrderTradeUpdate {
     L: string;
     p: string;
     sp?: string;
+    AP?: string;
+    cr?: string;
     rp?: string;
     b?: string;
     a?: string;
@@ -67,6 +69,8 @@ export interface OrderEvent {
   lastPrice: string;
   orderPrice: string;
   stopPrice?: string;
+  activationPrice?: string;
+  callbackRate?: string;
   isMaker: boolean;
   raw: RawOrderTradeUpdate;
 }
