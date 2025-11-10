@@ -77,6 +77,14 @@ export function resolveSideLabelForFill(side: OrderSide): string {
   return side === 'SELL' ? '卖出' : '买入';
 }
 
+export function resolvePositionDirectionLabel(side: OrderSide): string {
+  return side === 'SELL' ? '空' : '多';
+}
+
+export function resolvePositionActionLabel(side: OrderSide): string {
+  return side === 'SELL' ? '减仓' : '加仓';
+}
+
 function resolveMovingStopLabel(category: OrderCategory): string {
   if (category.level && Number.isFinite(category.level)) {
     return `移动止损第${category.level}档`;

@@ -13,7 +13,7 @@ describe('buildOrderFillCard', () => {
     const card = buildOrderFillCard(event);
     const cardBody = card.card as any;
     const header = cardBody.header;
-    expect(header.title.content).toBe('BTCUSDT-卖出-固定止损');
+    expect(header.title.content).toBe('BTCUSDT-空-减仓-固定止损');
   });
 
   it('展示数量、均价和成交时间', () => {

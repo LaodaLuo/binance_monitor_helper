@@ -4,7 +4,9 @@ import {
   resolveFillSourceLabel,
   resolveLifecycleTitle,
   resolveSideLabelForFill,
-  resolveSideLabelForLifecycle
+  resolveSideLabelForLifecycle,
+  resolvePositionDirectionLabel,
+  resolvePositionActionLabel
 } from '../orders/orderClassification.js';
 
 describe('classifyOrder', () => {
@@ -56,5 +58,9 @@ describe('resolve helpers', () => {
     expect(resolveSideLabelForLifecycle('SELL')).toBe('做空');
     expect(resolveSideLabelForFill('BUY')).toBe('买入');
     expect(resolveSideLabelForFill('SELL')).toBe('卖出');
+    expect(resolvePositionDirectionLabel('BUY')).toBe('多');
+    expect(resolvePositionDirectionLabel('SELL')).toBe('空');
+    expect(resolvePositionActionLabel('BUY')).toBe('加仓');
+    expect(resolvePositionActionLabel('SELL')).toBe('减仓');
   });
 });

@@ -2,16 +2,17 @@ import type { OrderEvent } from '../orders/types.js';
 import {
   classifyOrder,
   resolveFillSourceLabel,
-  resolveSideLabelForFill
+  resolveSideLabelForFill,
+  resolvePositionDirectionLabel,
+  resolvePositionActionLabel
 } from '../orders/orderClassification.js';
 import type { CardPayload } from './types.js';
 import { formatDisplayTime } from '../utils/time.js';
 
 export function buildOrderFillCard(event: OrderEvent): CardPayload {
   const category = classifyOrder(event.clientOrderId);
-  const sideLabel = resolveSideLabelForFill(event.side);
   const sourceLabel = resolveFillSourceLabel(category);
-  const title = `${event.symbol}-${sideLabel}-${sourceLabel}`;
+  const title = `${event.symbol}-${resolvePositionDirectionLabel(event.side)}-${resolvePositionActionLabel(event.side)}-${sourceLabel}`;
   const quantity = formatQuantity(event.originalQuantity);
   const avgPrice = resolveAveragePrice(event);
   const tradeTime = formatDisplayTime(event.tradeTime, undefined, true);
