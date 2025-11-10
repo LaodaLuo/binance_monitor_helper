@@ -2,36 +2,29 @@ import pRetry from 'p-retry';
 import { appConfig } from '../config/index.js';
 import { ListenKeyClient } from '../binance/listenKeyClient.js';
 import { StreamClient } from '../binance/streamClient.js';
-import { buildFeishuCard } from '../notifications/cardBuilder.js';
 import { FeishuNotifier } from '../notifications/notifier.js';
-import { OrderAggregator } from '../orders/aggregator.js';
 import { parseRawOrderTradeUpdate, toOrderEvent } from '../orders/eventMapper.js';
 import { logger } from '../utils/logger.js';
 import { PositionValidationService } from '../positions/positionValidationService.js';
+import { OrderNotificationService } from '../orders/orderNotificationService.js';
 
 const listenKeyClient = ListenKeyClient.createDefault();
 const streamClient = new StreamClient();
-const aggregator = new OrderAggregator();
-const notifier = new FeishuNotifier();
-const secondaryNotifier = new FeishuNotifier({
-  webhookUrl: appConfig.feishuSecondaryWebhookUrl
+const lifecycleNotifier = new FeishuNotifier({
+  webhookUrl: appConfig.feishuBot1WebhookUrl
+});
+const fillNotifier = new FeishuNotifier({
+  webhookUrl: appConfig.feishuBot2WebhookUrl
+});
+const orderNotificationService = new OrderNotificationService({
+  lifecycleNotifier,
+  fillNotifier
 });
 const positionValidationService = new PositionValidationService();
 
 let listenKey: string;
 let keepAliveTimer: NodeJS.Timeout | undefined;
 let positionValidationTimer: NodeJS.Timeout | undefined;
-
-const shouldSendToPrimary = (stateLabel: string): boolean => stateLabel.includes('成交');
-
-aggregator.onNotify(async (notification) => {
-  const card = buildFeishuCard(notification);
-  if (shouldSendToPrimary(notification.stateLabel)) {
-    await notifier.send(card);
-  } else {
-    await secondaryNotifier.send(card);
-  }
-});
 
 async function initListenKey(): Promise<string> {
   return await pRetry(() => listenKeyClient.create(), {
@@ -70,10 +63,10 @@ function registerStreamHandlers(): void {
     const raw = parseRawOrderTradeUpdate(payload);
     if (!raw) return;
     const event = toOrderEvent(raw);
-    logger.debug({event}, 'Event emit');
-    aggregator
-      .handleEvent(event)
-      .catch((error) => logger.error({ error }, 'Failed to process order event'));
+      logger.debug({ event }, 'Event emit');
+      orderNotificationService
+        .handle(event)
+        .catch((error) => logger.error({ error }, 'Failed to process order event'));
   });
 
   streamClient.on('listenKeyExpired', () => {

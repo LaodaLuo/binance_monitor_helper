@@ -1,5 +1,5 @@
 import type { ValidationSeverity } from '../positions/types.js';
-import type { CardPayload } from './cardBuilder.js';
+import type { CardPayload } from './types.js';
 import { formatDisplayTime } from '../utils/time.js';
 
 const SEVERITY_TEMPLATE: Record<ValidationSeverity, string> = {

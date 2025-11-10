@@ -2,15 +2,15 @@ import axios, { AxiosInstance } from 'axios';
 import pRetry from 'p-retry';
 import { appConfig } from '../config/index.js';
 import { logger } from '../utils/logger.js';
-import type { CardPayload } from './cardBuilder.js';
+import type { CardPayload } from './types.js';
 
 export class FeishuNotifier {
   private readonly client: AxiosInstance;
   private readonly maxRetry: number;
 
-  constructor(options?: { webhookUrl?: string; maxRetry?: number }) {
-    const webhookUrl = options?.webhookUrl ?? appConfig.feishuWebhookUrl;
-    this.maxRetry = options?.maxRetry ?? appConfig.maxRetry;
+  constructor(options: { webhookUrl: string; maxRetry?: number }) {
+    const webhookUrl = options.webhookUrl;
+    this.maxRetry = options.maxRetry ?? appConfig.maxRetry;
     this.client = axios.create({
       baseURL: webhookUrl,
       headers: {

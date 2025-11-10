@@ -18,11 +18,8 @@ const configSchema = z.object({
   BINANCE_API_SECRET: z.string().min(1, 'BINANCE_API_SECRET is required'),
   BINANCE_BASE_URL: z.string().url().default('https://fapi.binance.com'),
   BINANCE_WS_BASE_URL: z.string().url().default('wss://fstream.binance.com/ws'),
-  FEISHU_WEBHOOK_URL: z.string().url('FEISHU_WEBHOOK_URL must be a valid URL'),
-  FEISHU_SECONDARY_WEBHOOK_URL: z
-    .string()
-    .url('FEISHU_SECONDARY_WEBHOOK_URL must be a valid URL')
-    .default('https://open.feishu.cn/open-apis/bot/v2/hook/2b097171-60ad-476e-ae90-a78e301bb791'),
+  FEISHU_BOT1_WEBHOOK_URL: z.string().url('FEISHU_BOT1_WEBHOOK_URL must be a valid URL'),
+  FEISHU_BOT2_WEBHOOK_URL: z.string().url('FEISHU_BOT2_WEBHOOK_URL must be a valid URL'),
   POSITION_ALERT_WEBHOOK_URL: z.string().url('POSITION_ALERT_WEBHOOK_URL must be a valid URL'),
   AGGREGATION_WINDOW_MS: z
     .string()
@@ -63,8 +60,8 @@ export interface AppConfig {
   binanceApiSecret: string;
   binanceBaseUrl: string;
   binanceWsBaseUrl: string;
-  feishuWebhookUrl: string;
-  feishuSecondaryWebhookUrl: string;
+  feishuBot1WebhookUrl: string;
+  feishuBot2WebhookUrl: string;
   positionAlertWebhookUrl: string;
   aggregationWindowMs: number;
   listenKeyKeepAliveMs: number;
@@ -78,8 +75,8 @@ export const appConfig: AppConfig = {
   binanceApiSecret: rawConfig.BINANCE_API_SECRET,
   binanceBaseUrl: rawConfig.BINANCE_BASE_URL,
   binanceWsBaseUrl: rawConfig.BINANCE_WS_BASE_URL,
-  feishuWebhookUrl: rawConfig.FEISHU_WEBHOOK_URL,
-  feishuSecondaryWebhookUrl: rawConfig.FEISHU_SECONDARY_WEBHOOK_URL,
+  feishuBot1WebhookUrl: rawConfig.FEISHU_BOT1_WEBHOOK_URL,
+  feishuBot2WebhookUrl: rawConfig.FEISHU_BOT2_WEBHOOK_URL,
   positionAlertWebhookUrl: rawConfig.POSITION_ALERT_WEBHOOK_URL,
   aggregationWindowMs: Number(rawConfig.AGGREGATION_WINDOW_MS) || 10000,
   listenKeyKeepAliveMs: Number(rawConfig.LISTEN_KEY_KEEP_ALIVE_MS) || 25 * 60 * 1000,
