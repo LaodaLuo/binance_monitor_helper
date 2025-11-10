@@ -1,10 +1,8 @@
 import type { OrderEvent } from './types.js';
 import type { CardPayload } from '../notifications/types.js';
-import { buildOrderLifecycleCard } from '../notifications/orderLifecycleCardBuilder.js';
+import { buildOrderLifecycleCard, type LifecycleStatus } from '../notifications/orderLifecycleCardBuilder.js';
 import { buildOrderFillCard } from '../notifications/orderFillCardBuilder.js';
 import { logger } from '../utils/logger.js';
-
-type LifecycleStatus = 'NEW' | 'CANCELED' | 'EXPIRED';
 
 interface Notifier {
   send(card: CardPayload): Promise<void>;

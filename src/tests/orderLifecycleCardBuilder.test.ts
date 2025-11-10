@@ -14,11 +14,13 @@ describe('buildOrderLifecycleCard', () => {
     });
 
     const card = buildOrderLifecycleCard(event, 'NEW');
-    const header = card.card.header as any;
+    const cardBody = card.card as any;
+    const header = cardBody.header;
     expect(header.title.content).toBe('BTCUSDT-移动止损第1档');
     expect(header.template).toBe('blue');
 
-    const fields = card.card.elements[1].fields as any[];
+    const elements = cardBody.elements as any[];
+    const fields = elements[1].fields as any[];
     expect(fields[0].text.content).toContain('做多');
     expect(fields[1].text.content).toContain('0.5');
   });
@@ -40,9 +42,10 @@ describe('buildOrderLifecycleCard', () => {
     });
 
     const card = buildOrderLifecycleCard(event, 'EXPIRED', '撮合过程中超时 (EXPIRED_IN_MATCH)');
-    const header = card.card.header as any;
+    const cardBody = card.card as any;
+    const header = cardBody.header;
     expect(header.title.content).toBe('BTCUSDT-固定止损单');
-    const reasonElement = card.card.elements[3] as any;
+    const reasonElement = cardBody.elements[3] as any;
     expect(reasonElement.text.content).toContain('过期原因');
     expect(reasonElement.text.content).toContain('EXPIRED_IN_MATCH');
   });

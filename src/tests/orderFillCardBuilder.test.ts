@@ -11,7 +11,8 @@ describe('buildOrderFillCard', () => {
       side: 'SELL'
     });
     const card = buildOrderFillCard(event);
-    const header = card.card.header as any;
+    const cardBody = card.card as any;
+    const header = cardBody.header;
     expect(header.title.content).toBe('BTCUSDT-卖出-固定止损');
   });
 
@@ -21,11 +22,13 @@ describe('buildOrderFillCard', () => {
       averagePrice: '62888.5'
     });
     const card = buildOrderFillCard(event);
-    const fields = card.card.elements[0].fields as any[];
+    const cardBody = card.card as any;
+    const elements = cardBody.elements as any[];
+    const fields = elements[0].fields as any[];
     expect(fields[0].text.content).toContain('1.25');
     expect(fields[1].text.content).toContain('62888.5');
 
-    const timeLine = card.card.elements[1].text.content as string;
+    const timeLine = elements[1].text.content as string;
     expect(timeLine).toContain('最后成交时间');
     expect(timeLine).toContain('2024-05-01 12:30:00 (UTC+8)');
   });

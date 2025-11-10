@@ -1,4 +1,4 @@
-import type { OrderEvent, OrderStatus } from '../orders/types.js';
+import type { OrderEvent } from '../orders/types.js';
 import {
   classifyOrder,
   resolveLifecycleTitle,
@@ -7,7 +7,7 @@ import {
 import type { CardPayload } from './types.js';
 import { formatDisplayTime } from '../utils/time.js';
 
-type LifecycleStatus = Extract<OrderStatus, 'NEW' | 'CANCELED' | 'EXPIRED'>;
+export type LifecycleStatus = 'NEW' | 'CANCELED' | 'EXPIRED';
 
 const TEMPLATE_MAP: Record<LifecycleStatus, string> = {
   NEW: 'blue',
