@@ -60,7 +60,32 @@ describe('resolve helpers', () => {
     expect(resolveSideLabelForFill('SELL')).toBe('卖出');
     expect(resolvePositionDirectionLabel('BUY')).toBe('多');
     expect(resolvePositionDirectionLabel('SELL')).toBe('空');
-    expect(resolvePositionActionLabel('BUY')).toBe('加仓');
-    expect(resolvePositionActionLabel('SELL')).toBe('减仓');
+  });
+
+  it('止盈/止损/追踪止损一律视为减仓', () => {
+    const tpOrder = classifyOrder('TP1_demo');
+    const slOrder = classifyOrder('SL_stop');
+    const ftOrder = classifyOrder('FT_track');
+
+    // TP/SL/FT 订单无论 side 是什么，都是减仓
+    expect(resolvePositionActionLabel('BUY', tpOrder)).toBe('减仓');
+    expect(resolvePositionActionLabel('SELL', tpOrder)).toBe('减仓');
+    expect(resolvePositionActionLabel('BUY', slOrder)).toBe('减仓');
+    expect(resolvePositionActionLabel('SELL', slOrder)).toBe('减仓');
+    expect(resolvePositionActionLabel('BUY', ftOrder)).toBe('减仓');
+    expect(resolvePositionActionLabel('SELL', ftOrder)).toBe('减仓');
+  });
+
+  it('根据持仓方向与买卖方向判断加仓/减仓', () => {
+    const otherOrder = classifyOrder('custom_order');
+
+    expect(resolvePositionActionLabel('BUY', otherOrder, 'LONG')).toBe('加仓');
+    expect(resolvePositionActionLabel('SELL', otherOrder, 'LONG')).toBe('减仓');
+    expect(resolvePositionActionLabel('SELL', otherOrder, 'SHORT')).toBe('加仓');
+    expect(resolvePositionActionLabel('BUY', otherOrder, 'SHORT')).toBe('减仓');
+
+    // positionSide 缺失时退回下单方向判断
+    expect(resolvePositionActionLabel('BUY', otherOrder)).toBe('加仓');
+    expect(resolvePositionActionLabel('SELL', otherOrder)).toBe('减仓');
   });
 });

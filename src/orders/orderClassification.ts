@@ -1,4 +1,4 @@
-import type { OrderSide } from './types.js';
+import type { OrderPositionSide, OrderSide } from './types.js';
 
 export type OrderCategoryKind = 'tp' | 'sl' | 'ft' | 'other';
 
@@ -81,7 +81,20 @@ export function resolvePositionDirectionLabel(side: OrderSide): string {
   return side === 'SELL' ? '空' : '多';
 }
 
-export function resolvePositionActionLabel(side: OrderSide): string {
+export function resolvePositionActionLabel(
+  side: OrderSide,
+  category: OrderCategory,
+  positionSide?: OrderPositionSide
+): string {
+  if (positionSide === 'LONG') {
+    return side === 'SELL' ? '减仓' : '加仓';
+  }
+
+  if (positionSide === 'SHORT') {
+    return side === 'BUY' ? '减仓' : '加仓';
+  }
+
+  // positionSide 为空或 BOTH 时缺乏明确持仓方向，退回到按下单方向推断
   return side === 'SELL' ? '减仓' : '加仓';
 }
 

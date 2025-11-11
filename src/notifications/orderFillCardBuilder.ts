@@ -12,7 +12,8 @@ import { formatDisplayTime } from '../utils/time.js';
 export function buildOrderFillCard(event: OrderEvent): CardPayload {
   const category = classifyOrder(event.clientOrderId);
   const sourceLabel = resolveFillSourceLabel(category);
-  const title = `${event.symbol}-${resolvePositionDirectionLabel(event.side)}-${resolvePositionActionLabel(event.side)}-${sourceLabel}`;
+  const actionLabel = resolvePositionActionLabel(event.side, category, event.positionSide);
+  const title = `${event.symbol}-${resolvePositionDirectionLabel(event.side)}-${actionLabel}-${sourceLabel}`;
   const quantity = formatQuantity(event.originalQuantity);
   const avgPrice = resolveAveragePrice(event);
   const tradeTime = formatDisplayTime(event.tradeTime, undefined, true);

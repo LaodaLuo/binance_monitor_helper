@@ -1,4 +1,5 @@
 export type OrderSide = 'BUY' | 'SELL';
+export type OrderPositionSide = 'LONG' | 'SHORT' | 'BOTH';
 
 export type OrderStatus =
   | 'NEW'
@@ -31,6 +32,7 @@ export interface RawOrderTradeUpdate {
     c: string;
     C?: string;
     S: OrderSide;
+    ps?: OrderPositionSide;
     o: OrderType;
     x: string;
     X: OrderStatus;
@@ -58,6 +60,7 @@ export interface OrderEvent {
   clientOrderId: string;
   originalClientOrderId?: string;
   side: OrderSide;
+  positionSide?: OrderPositionSide;
   orderType: OrderType;
   status: OrderStatus;
   eventTime: Date;

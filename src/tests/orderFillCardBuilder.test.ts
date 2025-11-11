@@ -8,12 +8,59 @@ describe('buildOrderFillCard', () => {
   it('根据前缀和方向生成标题', () => {
     const event = createFilledEvent({
       clientOrderId: 'SL_stop',
-      side: 'SELL'
+      side: 'SELL',
+      positionSide: 'LONG'
     });
     const card = buildOrderFillCard(event);
     const cardBody = card.card as any;
     const header = cardBody.header;
     expect(header.title.content).toBe('BTCUSDT-空-减仓-固定止损');
+  });
+
+  it('做空止盈单（BUY方向）应显示减仓', () => {
+    const event = createFilledEvent({
+      clientOrderId: 'TP1_alpha',
+      side: 'BUY',  // 平空仓
+      positionSide: 'SHORT'
+    });
+    const card = buildOrderFillCard(event);
+    const cardBody = card.card as any;
+    const header = cardBody.header;
+    expect(header.title.content).toBe('BTCUSDT-多-减仓-移动止损第1档');
+  });
+
+  it('做多止盈单（SELL方向）应显示减仓', () => {
+    const event = createFilledEvent({
+      clientOrderId: 'TP2_beta',
+      side: 'SELL',  // 平多仓
+      positionSide: 'LONG'
+    });
+    const card = buildOrderFillCard(event);
+    const cardBody = card.card as any;
+    const header = cardBody.header;
+    expect(header.title.content).toBe('BTCUSDT-空-减仓-移动止损第2档');
+  });
+
+  it('追踪止损单应显示减仓', () => {
+    const event = createFilledEvent({
+      clientOrderId: 'FT_track',
+      side: 'BUY'
+    });
+    const card = buildOrderFillCard(event);
+    const cardBody = card.card as any;
+    const header = cardBody.header;
+    expect(header.title.content).toBe('BTCUSDT-多-减仓-追踪止损');
+  });
+
+  it('其他订单应显示加仓', () => {
+    const event = createFilledEvent({
+      clientOrderId: 'custom_order',
+      side: 'BUY'
+    });
+    const card = buildOrderFillCard(event);
+    const cardBody = card.card as any;
+    const header = cardBody.header;
+    expect(header.title.content).toBe('BTCUSDT-多-加仓-其他来源');
   });
 
   it('展示数量、均价和成交时间', () => {
@@ -35,12 +82,15 @@ describe('buildOrderFillCard', () => {
 });
 
 function createFilledEvent(overrides: Partial<OrderEvent> = {}): OrderEvent {
-  return {
+  const side = overrides.side ?? 'BUY';
+  const positionSide = overrides.positionSide ?? 'LONG';
+  const baseEvent: OrderEvent = {
     symbol: 'BTCUSDT',
     orderId: 2,
     clientOrderId: 'TP2_alpha',
     originalClientOrderId: undefined,
-    side: 'BUY',
+    side,
+    positionSide,
     orderType: 'LIMIT',
     status: 'FILLED',
     eventTime: new Date(tradeTimestamp),
@@ -53,8 +103,15 @@ function createFilledEvent(overrides: Partial<OrderEvent> = {}): OrderEvent {
     orderPrice: '62000',
     stopPrice: undefined,
     isMaker: false,
-    raw: createFillRaw(),
-    ...overrides
+    raw: createFillRaw({ S: side, ps: positionSide })
+  };
+
+  return {
+    ...baseEvent,
+    ...overrides,
+    side,
+    positionSide,
+    raw: overrides.raw ?? baseEvent.raw
   };
 }
 
@@ -64,6 +121,7 @@ function createFillRaw(overrides: Partial<RawOrderTradeUpdate['o']> = {}): RawOr
     c: 'TP2_alpha',
     C: undefined,
     S: 'BUY' as const,
+    ps: 'LONG' as const,
     o: 'LIMIT',
     x: 'TRADE',
     X: 'FILLED',
