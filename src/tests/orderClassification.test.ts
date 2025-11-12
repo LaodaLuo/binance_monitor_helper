@@ -27,6 +27,12 @@ describe('classifyOrder', () => {
     expect(result.kind).toBe('sl');
   });
 
+  it('识别 SL 档位', () => {
+    const result = classifyOrder('SL2_guard');
+    expect(result.kind).toBe('sl');
+    expect(result.level).toBe(2);
+  });
+
   it('识别 FT 前缀', () => {
     const result = classifyOrder('ft_track');
     expect(result.kind).toBe('ft');
@@ -43,12 +49,16 @@ describe('resolve helpers', () => {
     const tp = classifyOrder('TP3_demo');
     expect(resolveLifecycleTitle('BTCUSDT', tp)).toBe('BTCUSDT-移动止损第3档');
     const sl = classifyOrder('SL_demo');
-    expect(resolveLifecycleTitle('ETHUSDT', sl)).toBe('ETHUSDT-固定止损单');
+    expect(resolveLifecycleTitle('ETHUSDT', sl)).toBe('ETHUSDT-硬止损单');
+    const sl2 = classifyOrder('SL2_demo');
+    expect(resolveLifecycleTitle('ETHUSDT', sl2)).toBe('ETHUSDT-硬止损第2档');
   });
 
   it('根据分类输出成交标题片段', () => {
     const ft = classifyOrder('FT_demo');
     expect(resolveFillSourceLabel(ft)).toBe('追踪止损');
+    const sl2 = classifyOrder('SL2_demo');
+    expect(resolveFillSourceLabel(sl2)).toBe('硬止损第2档');
     const other = classifyOrder('random');
     expect(resolveFillSourceLabel(other)).toBe('其他来源');
   });

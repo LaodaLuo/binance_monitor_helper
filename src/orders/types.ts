@@ -189,10 +189,12 @@ export function resolveOrderPresentation(clientOrderId: string): OrderPresentati
   }
 
   if (normalized.startsWith('SL')) {
+    const slLevelMatch = normalized.match(/^SL(\d+)/);
+    const hardStopLabel = slLevelMatch ? `硬止损第${Number.parseInt(slLevelMatch[1], 10)}档` : '硬止损单';
     return {
       source: '止损',
       classification: 'SL',
-      titleSuffix: '5%成本止损'
+      titleSuffix: hardStopLabel
     };
   }
 

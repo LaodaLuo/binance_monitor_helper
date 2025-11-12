@@ -9,6 +9,7 @@ export interface OrderCategory {
 }
 
 const TP_LEVEL_REGEXP = /^TP(\d+)/i;
+const SL_LEVEL_REGEXP = /^SL(\d+)/i;
 
 export function classifyOrder(clientOrderId: string): OrderCategory {
   const normalized = (clientOrderId ?? '').trim();
@@ -24,8 +25,10 @@ export function classifyOrder(clientOrderId: string): OrderCategory {
   }
 
   if (upper.startsWith('SL')) {
+    const levelMatch = upper.match(SL_LEVEL_REGEXP);
     return {
       kind: 'sl',
+      level: levelMatch ? Number.parseInt(levelMatch[1], 10) : undefined,
       rawClientOrderId: clientOrderId
     };
   }
@@ -48,7 +51,7 @@ export function resolveLifecycleTitle(symbol: string, category: OrderCategory): 
     case 'tp':
       return `${symbol}-${resolveMovingStopLabel(category)}`;
     case 'sl':
-      return `${symbol}-固定止损单`;
+      return `${symbol}-${resolveHardStopLabel(category)}`;
     case 'ft':
       return `${symbol}-追踪止损单`;
     default:
@@ -61,7 +64,7 @@ export function resolveFillSourceLabel(category: OrderCategory): string {
     case 'tp':
       return resolveMovingStopLabel(category);
     case 'sl':
-      return '固定止损';
+      return resolveHardStopLabel(category);
     case 'ft':
       return '追踪止损';
     default:
@@ -86,6 +89,10 @@ export function resolvePositionActionLabel(
   category: OrderCategory,
   positionSide?: OrderPositionSide
 ): string {
+  if (category.kind === 'tp' || category.kind === 'sl' || category.kind === 'ft') {
+    return '减仓';
+  }
+
   if (positionSide === 'LONG') {
     return side === 'SELL' ? '减仓' : '加仓';
   }
@@ -103,4 +110,11 @@ function resolveMovingStopLabel(category: OrderCategory): string {
     return `移动止损第${category.level}档`;
   }
   return '移动止损单';
+}
+
+function resolveHardStopLabel(category: OrderCategory): string {
+  if (category.level && Number.isFinite(category.level)) {
+    return `硬止损第${category.level}档`;
+  }
+  return '硬止损单';
 }

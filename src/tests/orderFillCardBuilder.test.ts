@@ -5,7 +5,7 @@ import type { OrderEvent, RawOrderTradeUpdate } from '../orders/types.js';
 const tradeTimestamp = Date.parse('2024-05-01T04:30:00Z');
 
 describe('buildOrderFillCard', () => {
-  it('根据前缀和方向生成标题', () => {
+  it('标题仅包含交易对与来源，卡片颜色随持仓方向', () => {
     const event = createFilledEvent({
       clientOrderId: 'SL_stop',
       side: 'SELL',
@@ -14,10 +14,11 @@ describe('buildOrderFillCard', () => {
     const card = buildOrderFillCard(event);
     const cardBody = card.card as any;
     const header = cardBody.header;
-    expect(header.title.content).toBe('BTCUSDT-空-减仓-固定止损');
+    expect(header.title.content).toBe('BTCUSDT-硬止损单');
+    expect(header.template).toBe('green');
   });
 
-  it('做空止盈单（BUY方向）应显示减仓', () => {
+  it('做空仓（BUY 平仓）卡片背景红色，动作标红', () => {
     const event = createFilledEvent({
       clientOrderId: 'TP1_alpha',
       side: 'BUY',  // 平空仓
@@ -26,10 +27,13 @@ describe('buildOrderFillCard', () => {
     const card = buildOrderFillCard(event);
     const cardBody = card.card as any;
     const header = cardBody.header;
-    expect(header.title.content).toBe('BTCUSDT-多-减仓-移动止损第1档');
+    expect(header.template).toBe('red');
+    const fields = cardBody.elements[0].fields as any[];
+    expect(fields[0].text.content).toContain('<font color="red">做空</font>');
+    expect(fields[1].text.content).toContain('<font color="red">减仓</font>');
   });
 
-  it('做多止盈单（SELL方向）应显示减仓', () => {
+  it('做多仓（SELL 平仓）卡片背景绿色，动作标红', () => {
     const event = createFilledEvent({
       clientOrderId: 'TP2_beta',
       side: 'SELL',  // 平多仓
@@ -38,10 +42,13 @@ describe('buildOrderFillCard', () => {
     const card = buildOrderFillCard(event);
     const cardBody = card.card as any;
     const header = cardBody.header;
-    expect(header.title.content).toBe('BTCUSDT-空-减仓-移动止损第2档');
+    expect(header.template).toBe('green');
+    const fields = cardBody.elements[0].fields as any[];
+    expect(fields[0].text.content).toContain('<font color="green">做多</font>');
+    expect(fields[1].text.content).toContain('<font color="red">减仓</font>');
   });
 
-  it('追踪止损单应显示减仓', () => {
+  it('追踪止损单依旧判定为减仓且标红', () => {
     const event = createFilledEvent({
       clientOrderId: 'FT_track',
       side: 'BUY'
@@ -49,18 +56,25 @@ describe('buildOrderFillCard', () => {
     const card = buildOrderFillCard(event);
     const cardBody = card.card as any;
     const header = cardBody.header;
-    expect(header.title.content).toBe('BTCUSDT-多-减仓-追踪止损');
+    expect(header.title.content).toBe('BTCUSDT-追踪止损');
+    const fields = cardBody.elements[0].fields as any[];
+    expect(fields[1].text.content).toContain('<font color="red">减仓</font>');
   });
 
-  it('其他订单应显示加仓', () => {
+  it('其他订单在缺省持仓方向时退回买入/卖出判断', () => {
     const event = createFilledEvent({
       clientOrderId: 'custom_order',
-      side: 'BUY'
+      side: 'BUY',
+      positionSide: 'BOTH'
     });
     const card = buildOrderFillCard(event);
     const cardBody = card.card as any;
     const header = cardBody.header;
-    expect(header.title.content).toBe('BTCUSDT-多-加仓-其他来源');
+    expect(header.title.content).toBe('BTCUSDT-其他来源');
+    expect(header.template).toBe('green');
+    const fields = cardBody.elements[0].fields as any[];
+    expect(fields[0].text.content).toContain('<font color="green">做多</font>');
+    expect(fields[1].text.content).toContain('<font color="green">加仓</font>');
   });
 
   it('展示数量、均价和成交时间', () => {
@@ -71,11 +85,11 @@ describe('buildOrderFillCard', () => {
     const card = buildOrderFillCard(event);
     const cardBody = card.card as any;
     const elements = cardBody.elements as any[];
-    const fields = elements[0].fields as any[];
-    expect(fields[0].text.content).toContain('1.25');
-    expect(fields[1].text.content).toContain('62888.5');
+    const quantityFields = elements[1].fields as any[];
+    expect(quantityFields[0].text.content).toContain('1.25');
+    expect(quantityFields[1].text.content).toContain('62888.5');
 
-    const timeLine = elements[1].text.content as string;
+    const timeLine = elements[2].text.content as string;
     expect(timeLine).toContain('最后成交时间');
     expect(timeLine).toContain('2024-05-01 12:30:00 (UTC+8)');
   });

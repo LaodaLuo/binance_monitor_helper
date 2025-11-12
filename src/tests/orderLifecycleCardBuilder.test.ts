@@ -44,7 +44,7 @@ describe('buildOrderLifecycleCard', () => {
     const card = buildOrderLifecycleCard(event, 'EXPIRED', '撮合过程中超时 (EXPIRED_IN_MATCH)');
     const cardBody = card.card as any;
     const header = cardBody.header;
-    expect(header.title.content).toBe('BTCUSDT-固定止损单');
+    expect(header.title.content).toBe('BTCUSDT-硬止损单');
     const reasonElement = cardBody.elements[3] as any;
     expect(reasonElement.text.content).toContain('过期原因');
     expect(reasonElement.text.content).toContain('EXPIRED_IN_MATCH');

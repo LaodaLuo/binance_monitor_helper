@@ -2,8 +2,6 @@ import type { OrderEvent } from '../orders/types.js';
 import {
   classifyOrder,
   resolveFillSourceLabel,
-  resolveSideLabelForFill,
-  resolvePositionDirectionLabel,
   resolvePositionActionLabel
 } from '../orders/orderClassification.js';
 import type { CardPayload } from './types.js';
@@ -13,12 +11,33 @@ export function buildOrderFillCard(event: OrderEvent): CardPayload {
   const category = classifyOrder(event.clientOrderId);
   const sourceLabel = resolveFillSourceLabel(category);
   const actionLabel = resolvePositionActionLabel(event.side, category, event.positionSide);
-  const title = `${event.symbol}-${resolvePositionDirectionLabel(event.side)}-${actionLabel}-${sourceLabel}`;
+  const directionMeta = resolveDirectionMeta(event);
+  const title = `${event.symbol}-${sourceLabel}`;
   const quantity = formatQuantity(event.originalQuantity);
   const avgPrice = resolveAveragePrice(event);
   const tradeTime = formatDisplayTime(event.tradeTime, undefined, true);
+  const actionColor = resolveActionColor(actionLabel);
 
   const elements: Record<string, unknown>[] = [
+    {
+      tag: 'div',
+      fields: [
+        {
+          is_short: true,
+          text: {
+            tag: 'lark_md',
+            content: `**持仓方向:**\n${highlightWithColor(directionMeta.color, directionMeta.label)}`
+          }
+        },
+        {
+          is_short: true,
+          text: {
+            tag: 'lark_md',
+            content: `**交易动作:**\n${highlightWithColor(actionColor, actionLabel)}`
+          }
+        }
+      ]
+    },
     {
       tag: 'div',
       fields: [
@@ -55,7 +74,7 @@ export function buildOrderFillCard(event: OrderEvent): CardPayload {
         enable_forward: true
       },
       header: {
-        template: 'green',
+        template: directionMeta.template,
         title: {
           tag: 'plain_text',
           content: title
@@ -96,4 +115,35 @@ function formatQuantity(value?: string): string {
   if (!value) return '-';
   const trimmed = value.trim();
   return trimmed || '-';
+}
+
+type DirectionColor = 'green' | 'red';
+
+interface DirectionMeta {
+  label: string;
+  color: DirectionColor;
+  template: DirectionColor;
+}
+
+function resolveDirectionMeta(event: OrderEvent): DirectionMeta {
+  if (event.positionSide === 'LONG') {
+    return { label: '做多', color: 'green', template: 'green' };
+  }
+  if (event.positionSide === 'SHORT') {
+    return { label: '做空', color: 'red', template: 'red' };
+  }
+
+  if (event.side === 'SELL') {
+    return { label: '做空', color: 'red', template: 'red' };
+  }
+
+  return { label: '做多', color: 'green', template: 'green' };
+}
+
+function resolveActionColor(actionLabel: string): DirectionColor {
+  return actionLabel === '加仓' ? 'green' : 'red';
+}
+
+function highlightWithColor(color: DirectionColor, text: string): string {
+  return `<font color="${color}">${text}</font>`;
 }
