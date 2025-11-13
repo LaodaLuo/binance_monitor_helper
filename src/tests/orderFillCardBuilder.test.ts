@@ -5,7 +5,7 @@ import type { OrderEvent, RawOrderTradeUpdate } from '../orders/types.js';
 const tradeTimestamp = Date.parse('2024-05-01T04:30:00Z');
 
 describe('buildOrderFillCard', () => {
-  it('标题仅包含交易对与来源，卡片颜色随持仓方向', () => {
+  it('标题仅包含交易对与来源，header 颜色随加/减仓动作', () => {
     const event = createFilledEvent({
       clientOrderId: 'SL_stop',
       side: 'SELL',
@@ -15,7 +15,7 @@ describe('buildOrderFillCard', () => {
     const cardBody = card.card as any;
     const header = cardBody.header;
     expect(header.title.content).toBe('BTCUSDT-硬止损单');
-    expect(header.template).toBe('green');
+    expect(header.template).toBe('red');
   });
 
   it('做空仓（BUY 平仓）卡片背景红色，动作标红', () => {
@@ -33,7 +33,7 @@ describe('buildOrderFillCard', () => {
     expect(fields[1].text.content).toContain('<font color="red">减仓</font>');
   });
 
-  it('做多仓（SELL 平仓）卡片背景绿色，动作标红', () => {
+  it('做多仓（SELL 平仓）卡片背景红色，动作标红', () => {
     const event = createFilledEvent({
       clientOrderId: 'TP2_beta',
       side: 'SELL',  // 平多仓
@@ -42,7 +42,7 @@ describe('buildOrderFillCard', () => {
     const card = buildOrderFillCard(event);
     const cardBody = card.card as any;
     const header = cardBody.header;
-    expect(header.template).toBe('green');
+    expect(header.template).toBe('red');
     const fields = cardBody.elements[0].fields as any[];
     expect(fields[0].text.content).toContain('<font color="green">做多</font>');
     expect(fields[1].text.content).toContain('<font color="red">减仓</font>');
@@ -61,7 +61,7 @@ describe('buildOrderFillCard', () => {
     expect(fields[1].text.content).toContain('<font color="red">减仓</font>');
   });
 
-  it('其他订单在缺省持仓方向时退回买入/卖出判断', () => {
+  it('其他订单在缺省持仓方向时退回买入/卖出判断，header 颜色跟随动作', () => {
     const event = createFilledEvent({
       clientOrderId: 'custom_order',
       side: 'BUY',

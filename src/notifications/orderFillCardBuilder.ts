@@ -17,6 +17,7 @@ export function buildOrderFillCard(event: OrderEvent): CardPayload {
   const avgPrice = resolveAveragePrice(event);
   const tradeTime = formatDisplayTime(event.tradeTime, undefined, true);
   const actionColor = resolveActionColor(actionLabel);
+  const headerTemplate = actionColor;
 
   const elements: Record<string, unknown>[] = [
     {
@@ -74,7 +75,7 @@ export function buildOrderFillCard(event: OrderEvent): CardPayload {
         enable_forward: true
       },
       header: {
-        template: directionMeta.template,
+        template: headerTemplate,
         title: {
           tag: 'plain_text',
           content: title
@@ -122,22 +123,21 @@ type DirectionColor = 'green' | 'red';
 interface DirectionMeta {
   label: string;
   color: DirectionColor;
-  template: DirectionColor;
 }
 
 function resolveDirectionMeta(event: OrderEvent): DirectionMeta {
   if (event.positionSide === 'LONG') {
-    return { label: '做多', color: 'green', template: 'green' };
+    return { label: '做多', color: 'green' };
   }
   if (event.positionSide === 'SHORT') {
-    return { label: '做空', color: 'red', template: 'red' };
+    return { label: '做空', color: 'red' };
   }
 
   if (event.side === 'SELL') {
-    return { label: '做空', color: 'red', template: 'red' };
+    return { label: '做空', color: 'red' };
   }
 
-  return { label: '做多', color: 'green', template: 'green' };
+  return { label: '做多', color: 'green' };
 }
 
 function resolveActionColor(actionLabel: string): DirectionColor {
