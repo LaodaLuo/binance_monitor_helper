@@ -38,6 +38,18 @@ describe('classifyOrder', () => {
     expect(result.kind).toBe('ft');
   });
 
+  it('识别 TW_ 前缀并解析时间周期', () => {
+    const result = classifyOrder('TW_1m');
+    expect(result.kind).toBe('tw');
+    expect(result.timeFrame).toBe('1m');
+  });
+
+  it('TW_ 支持带后缀的 clientOrderId，仅提取首段时间周期', () => {
+    const result = classifyOrder('TW_15m_custom_suffix');
+    expect(result.kind).toBe('tw');
+    expect(result.timeFrame).toBe('15m');
+  });
+
   it('其他前缀归为通用订单', () => {
     const result = classifyOrder('custom');
     expect(result.kind).toBe('other');
@@ -52,6 +64,8 @@ describe('resolve helpers', () => {
     expect(resolveLifecycleTitle('ETHUSDT', sl)).toBe('ETHUSDT-硬止损单');
     const sl2 = classifyOrder('SL2_demo');
     expect(resolveLifecycleTitle('ETHUSDT', sl2)).toBe('ETHUSDT-硬止损第2档');
+    const tw = classifyOrder('TW_3m');
+    expect(resolveLifecycleTitle('BTCUSDT', tw)).toBe('BTCUSDT-3m 时间周期止损单');
   });
 
   it('根据分类输出成交标题片段', () => {
@@ -61,6 +75,8 @@ describe('resolve helpers', () => {
     expect(resolveFillSourceLabel(sl2)).toBe('硬止损第2档');
     const other = classifyOrder('random');
     expect(resolveFillSourceLabel(other)).toBe('其他来源');
+    const tw = classifyOrder('TW_1h');
+    expect(resolveFillSourceLabel(tw)).toBe('1h 时间周期止损单');
   });
 
   it('根据订单方向输出中文标签', () => {
@@ -76,6 +92,7 @@ describe('resolve helpers', () => {
     const tpOrder = classifyOrder('TP1_demo');
     const slOrder = classifyOrder('SL_stop');
     const ftOrder = classifyOrder('FT_track');
+    const twOrder = classifyOrder('TW_1m');
 
     // TP/SL/FT 订单无论 side 是什么，都是减仓
     expect(resolvePositionActionLabel('BUY', tpOrder)).toBe('减仓');
@@ -84,6 +101,8 @@ describe('resolve helpers', () => {
     expect(resolvePositionActionLabel('SELL', slOrder)).toBe('减仓');
     expect(resolvePositionActionLabel('BUY', ftOrder)).toBe('减仓');
     expect(resolvePositionActionLabel('SELL', ftOrder)).toBe('减仓');
+    expect(resolvePositionActionLabel('BUY', twOrder)).toBe('减仓');
+    expect(resolvePositionActionLabel('SELL', twOrder)).toBe('减仓');
   });
 
   it('根据持仓方向与买卖方向判断加仓/减仓', () => {

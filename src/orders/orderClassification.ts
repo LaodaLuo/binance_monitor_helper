@@ -1,10 +1,12 @@
 import type { OrderPositionSide, OrderSide } from './types.js';
+import { extractTimeWindowFromClientOrderId } from './types.js';
 
-export type OrderCategoryKind = 'tp' | 'sl' | 'ft' | 'other';
+export type OrderCategoryKind = 'tp' | 'sl' | 'ft' | 'tw' | 'other';
 
 export interface OrderCategory {
   kind: OrderCategoryKind;
   level?: number;
+  timeFrame?: string;
   rawClientOrderId: string;
 }
 
@@ -14,6 +16,15 @@ const SL_LEVEL_REGEXP = /^SL(\d+)/i;
 export function classifyOrder(clientOrderId: string): OrderCategory {
   const normalized = (clientOrderId ?? '').trim();
   const upper = normalized.toUpperCase();
+
+  if (upper.startsWith('TW_')) {
+    const timeFrame = extractTimeWindowFromClientOrderId(clientOrderId);
+    return {
+      kind: 'tw',
+      timeFrame,
+      rawClientOrderId: clientOrderId
+    };
+  }
 
   if (upper.startsWith('TP')) {
     const levelMatch = upper.match(TP_LEVEL_REGEXP);
@@ -54,6 +65,8 @@ export function resolveLifecycleTitle(symbol: string, category: OrderCategory): 
       return `${symbol}-${resolveHardStopLabel(category)}`;
     case 'ft':
       return `${symbol}-追踪止损单`;
+    case 'tw':
+      return `${symbol}-${resolveTimeWindowStopLabel(category)}`;
     default:
       return `${symbol}-其他来源订单`;
   }
@@ -67,6 +80,8 @@ export function resolveFillSourceLabel(category: OrderCategory): string {
       return resolveHardStopLabel(category);
     case 'ft':
       return '追踪止损';
+    case 'tw':
+      return resolveTimeWindowStopLabel(category);
     default:
       return '其他来源';
   }
@@ -89,7 +104,7 @@ export function resolvePositionActionLabel(
   category: OrderCategory,
   positionSide?: OrderPositionSide
 ): string {
-  if (category.kind === 'tp' || category.kind === 'sl' || category.kind === 'ft') {
+  if (category.kind === 'tp' || category.kind === 'sl' || category.kind === 'ft' || category.kind === 'tw') {
     return '减仓';
   }
 
@@ -117,4 +132,12 @@ function resolveHardStopLabel(category: OrderCategory): string {
     return `硬止损第${category.level}档`;
   }
   return '硬止损单';
+}
+
+function resolveTimeWindowStopLabel(category: OrderCategory): string {
+  const timeFrame = category.timeFrame?.trim();
+  if (timeFrame) {
+    return `${timeFrame} 时间周期止损单`;
+  }
+  return '时间周期止损单';
 }

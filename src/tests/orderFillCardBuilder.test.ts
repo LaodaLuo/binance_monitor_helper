@@ -61,6 +61,19 @@ describe('buildOrderFillCard', () => {
     expect(fields[1].text.content).toContain('<font color="red">减仓</font>');
   });
 
+  it('时间周期止损单在成交卡片中展示周期且标红', () => {
+    const event = createFilledEvent({
+      clientOrderId: 'TW_15m',
+      side: 'SELL',
+      positionSide: 'LONG'
+    });
+    const card = buildOrderFillCard(event);
+    const cardBody = card.card as any;
+    const header = cardBody.header;
+    expect(header.title.content).toBe('BTCUSDT-15m 时间周期止损单');
+    expect(header.template).toBe('red');
+  });
+
   it('其他订单在缺省持仓方向时退回买入/卖出判断，header 颜色跟随动作', () => {
     const event = createFilledEvent({
       clientOrderId: 'custom_order',

@@ -15,7 +15,7 @@ export type OrderType = 'MARKET' | 'LIMIT' | 'STOP' | 'STOP_MARKET' | 'TAKE_PROF
 
 export type OrderSource = '止盈' | '止损' | '追踪止损' | '其他';
 
-export type OrderClassification = 'TP1' | 'TP2' | 'TP' | 'SL' | 'FT' | 'GENERAL';
+export type OrderClassification = 'TP1' | 'TP2' | 'TP' | 'SL' | 'FT' | 'TW' | 'GENERAL';
 
 export interface OrderPresentation {
   source: OrderSource;
@@ -150,13 +150,14 @@ export const SLTP_WINDOW_SCENARIOS: ScenarioKey[] = [
 
 export function isStopLossOrTakeProfit(clientOrderId: string): boolean {
   const normalized = clientOrderId.toUpperCase();
-  return normalized.startsWith('SL') || normalized.startsWith('TP') || normalized.startsWith('FT');
+  return normalized.startsWith('SL') || normalized.startsWith('TP') || normalized.startsWith('FT') || normalized.startsWith('TW_');
 }
 
 export function resolveOrderPresentation(clientOrderId: string): OrderPresentation {
-  const normalized = clientOrderId.trim().toUpperCase();
+  const trimmed = clientOrderId.trim();
+  const upper = trimmed.toUpperCase();
 
-  if (normalized.startsWith('FT')) {
+  if (upper.startsWith('FT')) {
     return {
       source: '追踪止损',
       classification: 'FT',
@@ -164,7 +165,7 @@ export function resolveOrderPresentation(clientOrderId: string): OrderPresentati
     };
   }
 
-  if (normalized.startsWith('TP1')) {
+  if (upper.startsWith('TP1')) {
     return {
       source: '止盈',
       classification: 'TP1',
@@ -172,7 +173,7 @@ export function resolveOrderPresentation(clientOrderId: string): OrderPresentati
     };
   }
 
-  if (normalized.startsWith('TP2')) {
+  if (upper.startsWith('TP2')) {
     return {
       source: '止盈',
       classification: 'TP2',
@@ -180,7 +181,7 @@ export function resolveOrderPresentation(clientOrderId: string): OrderPresentati
     };
   }
 
-  if (normalized.startsWith('TP')) {
+  if (upper.startsWith('TP')) {
     return {
       source: '止盈',
       classification: 'TP',
@@ -188,8 +189,18 @@ export function resolveOrderPresentation(clientOrderId: string): OrderPresentati
     };
   }
 
-  if (normalized.startsWith('SL')) {
-    const slLevelMatch = normalized.match(/^SL(\d+)/);
+  if (upper.startsWith('TW_')) {
+    const timeFrame = extractTimeWindowFromClientOrderId(trimmed);
+    const label = timeFrame ? `${timeFrame} 时间周期止损单` : '时间周期止损单';
+    return {
+      source: '止损',
+      classification: 'TW',
+      titleSuffix: label
+    };
+  }
+
+  if (upper.startsWith('SL')) {
+    const slLevelMatch = upper.match(/^SL(\d+)/);
     const hardStopLabel = slLevelMatch ? `硬止损第${Number.parseInt(slLevelMatch[1], 10)}档` : '硬止损单';
     return {
       source: '止损',
@@ -211,4 +222,21 @@ export function resolveOrderSource(clientOrderId: string): OrderSource {
 
 export function aggregationKey(event: OrderEvent): string {
   return `${event.symbol}:${event.orderId}:${event.clientOrderId}`;
+}
+
+export function extractTimeWindowFromClientOrderId(clientOrderId: string): string | undefined {
+  const trimmed = clientOrderId.trim();
+  const upper = trimmed.toUpperCase();
+  if (!upper.startsWith('TW_')) {
+    return undefined;
+  }
+  const rest = trimmed.slice(3);
+  if (!rest) {
+    return undefined;
+  }
+  const [timeFrame] = rest.split('_');
+  if (!timeFrame) {
+    return undefined;
+  }
+  return timeFrame;
 }

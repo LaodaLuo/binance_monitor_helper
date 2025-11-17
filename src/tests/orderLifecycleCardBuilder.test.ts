@@ -71,6 +71,19 @@ describe('buildOrderLifecycleCard', () => {
     const priceFields = cardBody.elements[2].fields as any[];
     expect(priceFields[0].text.content).toContain('65500');
   });
+
+  it('为 TW_ 时间周期止损单生成带周期的标题', () => {
+    const event = createOrderEvent({
+      clientOrderId: 'TW_1m',
+      status: 'NEW'
+    });
+
+    const card = buildOrderLifecycleCard(event, 'NEW');
+    const cardBody = card.card as any;
+    const header = cardBody.header;
+    expect(header.title.content).toBe('BTCUSDT-1m 时间周期止损单');
+    expect(header.template).toBe('blue');
+  });
 });
 
 function createOrderEvent(overrides: Partial<OrderEvent> = {}): OrderEvent {
