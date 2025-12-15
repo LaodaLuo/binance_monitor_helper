@@ -16,6 +16,8 @@ interface OrderNotificationServiceOptions {
 export class OrderNotificationService {
   private readonly lifecycleNotifier: Notifier;
   private readonly fillNotifier: Notifier;
+  private readonly dedupCache = new Map<string, number>();
+  private readonly dedupTtlMs = 60 * 1000;
 
   constructor(options: OrderNotificationServiceOptions) {
     this.lifecycleNotifier = options.lifecycleNotifier;
@@ -23,6 +25,16 @@ export class OrderNotificationService {
   }
 
   async handle(event: OrderEvent): Promise<void> {
+    const dedupKey = this.buildDedupKey(event);
+    if (this.isDuplicate(dedupKey)) {
+      logger.warn(
+        { orderId: event.orderId, clientOrderId: event.clientOrderId, status: event.status },
+        'Duplicate order event ignored'
+      );
+      return;
+    }
+    this.markSeen(dedupKey);
+
     const normalizedStatus = normalizeStatus(event.status);
     if (!normalizedStatus) {
       logger.debug(
@@ -50,6 +62,34 @@ export class OrderNotificationService {
         { clientOrderId: event.clientOrderId, status: normalizedStatus },
         'Order filled notification dispatched'
       );
+    }
+  }
+
+  private buildDedupKey(event: OrderEvent): string {
+    const eventTime = event.raw?.E ?? event.eventTime.getTime();
+    const lastQty = event.lastQuantity ?? '';
+    const cumQty = event.cumulativeQuantity ?? '';
+    return `${event.orderId}:${event.clientOrderId}:${event.status}:${eventTime}:${cumQty}:${lastQty}`;
+  }
+
+  private isDuplicate(key: string): boolean {
+    const now = Date.now();
+    this.prune(now);
+    return this.dedupCache.has(key);
+  }
+
+  private markSeen(key: string): void {
+    this.dedupCache.set(key, Date.now());
+  }
+
+  private prune(now: number): void {
+    for (const [key, ts] of this.dedupCache.entries()) {
+      if (now - ts > this.dedupTtlMs) {
+        this.dedupCache.delete(key);
+      }
+    }
+    if (this.dedupCache.size > 2000) {
+      this.dedupCache.clear();
     }
   }
 }
